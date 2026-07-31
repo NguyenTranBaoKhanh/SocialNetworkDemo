@@ -1,0 +1,8 @@
+# Chuẩn hóa line endings: text tự nhận diện, chuẩn LF trong repo.
+* text=auto eol=lf
+
+# File nhị phân — không đụng.
+*.png binary
+*.jpg binary
+*.ico binary
+*.dll binary
