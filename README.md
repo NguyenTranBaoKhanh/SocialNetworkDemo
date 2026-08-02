@@ -52,7 +52,9 @@ Kiểm tra: `GET /health` → `{"status":"ok"}`. SignalR hub tại `/hubs/chat`.
 | Method | Route | Auth | Chức năng |
 |---|---|:---:|---|
 | POST | `/api/auth/register` | | Đăng ký (hash password, chống trùng username/email) |
-| POST | `/api/auth/login` | | Đăng nhập → JWT |
+| POST | `/api/auth/login` | | Đăng nhập → access token + refresh token |
+| POST | `/api/auth/refresh` | | Đổi refresh token lấy cặp token mới (xoay vòng) |
+| POST | `/api/auth/logout` | | Thu hồi refresh token |
 | POST | `/api/posts` | ✓ | Tạo post (kèm media) |
 | GET | `/api/posts/{id}` | | Xem post |
 | DELETE | `/api/posts/{id}` | ✓ | Xóa post (soft, chỉ tác giả) |
@@ -63,7 +65,12 @@ Kiểm tra: `GET /health` → `{"status":"ok"}`. SignalR hub tại `/hubs/chat`.
 | POST/DELETE | `/api/users/{username}/follow` | ✓ | Follow / unfollow (chống tự-follow) |
 | GET | `/api/feed?cursor=&limit=` | ✓ | Feed fan-out on read, cursor pagination |
 
-> Gửi token qua header `Authorization: Bearer <token>`.
+> Gửi access token qua header `Authorization: Bearer <token>`.
+
+**Chiến lược token:** access token (JWT stateless, sống ngắn **15 phút**) + refresh token
+(sống dài **7 ngày**, lưu hash ở bảng `refresh_tokens` nên **thu hồi được**). Khi access token
+hết hạn, client gọi `/api/auth/refresh`. Mỗi lần refresh **xoay vòng** (revoke token cũ, cấp mới);
+dùng lại token đã revoke bị coi là dấu hiệu bị đánh cắp → thu hồi toàn bộ token của user.
 
 ## Test
 

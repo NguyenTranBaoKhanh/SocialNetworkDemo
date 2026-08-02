@@ -10,6 +10,7 @@ namespace Application.Common;
 public interface IAppDbContext
 {
     DbSet<User> Users { get; }
+    DbSet<RefreshToken> RefreshTokens { get; }
     DbSet<Post> Posts { get; }
     DbSet<PostMedia> PostMedia { get; }
     DbSet<Comment> Comments { get; }

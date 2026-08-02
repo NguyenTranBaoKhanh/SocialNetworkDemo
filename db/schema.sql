@@ -40,6 +40,25 @@ CREATE TABLE users (
 );
 
 -- ---------------------------------------------------------------------------
+-- REFRESH TOKENS
+-- Access token (JWT) stateless, sống ngắn. Refresh token sống dài, lưu ở DB để
+-- THU HỒI được (logout, đổi mật khẩu). Chỉ lưu HASH (SHA-256), không lưu plaintext.
+-- ---------------------------------------------------------------------------
+CREATE TABLE refresh_tokens (
+    id                     bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_id                bigint      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash             text        NOT NULL,             -- SHA-256 của token thô
+    expires_at             timestamptz NOT NULL,
+    revoked_at             timestamptz,                      -- NULL = còn hiệu lực
+    replaced_by_token_hash text,                             -- token thay thế khi xoay vòng
+    created_at             timestamptz NOT NULL DEFAULT now(),
+
+    CONSTRAINT uq_refresh_tokens_hash UNIQUE (token_hash)
+);
+
+CREATE INDEX idx_refresh_tokens_user ON refresh_tokens (user_id);
+
+-- ---------------------------------------------------------------------------
 -- POSTS
 -- ---------------------------------------------------------------------------
 CREATE TABLE posts (

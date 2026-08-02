@@ -9,6 +9,7 @@ public class AppDbContext : DbContext, IAppDbContext
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
     public DbSet<User> Users => Set<User>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Post> Posts => Set<Post>();
     public DbSet<PostMedia> PostMedia => Set<PostMedia>();
     public DbSet<Comment> Comments => Set<Comment>();
@@ -40,6 +41,19 @@ public class AppDbContext : DbContext, IAppDbContext
             e.HasIndex(x => x.Username).IsUnique();
             e.HasIndex(x => x.Email).IsUnique();
             e.HasIndex(x => x.PublicId).IsUnique();
+        });
+
+        // ---------------- REFRESH TOKENS ----------------
+        b.Entity<RefreshToken>(e =>
+        {
+            e.ToTable("refresh_tokens");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.CreatedAt).HasDefaultValueSql("now()");
+            e.Ignore(x => x.IsActive);   // computed, không map cột
+            e.HasIndex(x => x.TokenHash).IsUnique();
+            e.HasIndex(x => x.UserId).HasDatabaseName("idx_refresh_tokens_user");
+            e.HasOne(x => x.User).WithMany()
+                .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         // ---------------- POSTS ----------------

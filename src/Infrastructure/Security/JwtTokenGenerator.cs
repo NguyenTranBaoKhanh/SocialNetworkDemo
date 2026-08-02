@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using Application.Common;
 using Domain.Entities;
@@ -14,7 +15,7 @@ public class JwtTokenGenerator : IJwtTokenGenerator
 
     public JwtTokenGenerator(IOptions<JwtOptions> opt) => _opt = opt.Value;
 
-    public (string Token, DateTimeOffset ExpiresAt) Generate(User user)
+    public (string Token, DateTimeOffset ExpiresAt) GenerateAccessToken(User user)
     {
         var expiresAt = DateTimeOffset.UtcNow.AddMinutes(_opt.ExpiryMinutes);
 
@@ -38,4 +39,23 @@ public class JwtTokenGenerator : IJwtTokenGenerator
 
         return (new JwtSecurityTokenHandler().WriteToken(token), expiresAt);
     }
+
+    public RefreshTokenResult GenerateRefreshToken()
+    {
+        // Token thô: 32 byte ngẫu nhiên mã hóa base64url (không đoán được).
+        var bytes = RandomNumberGenerator.GetBytes(32);
+        var raw = Base64UrlEncode(bytes);
+        var expiresAt = DateTimeOffset.UtcNow.AddDays(_opt.RefreshTokenDays);
+        return new RefreshTokenResult(raw, HashRefreshToken(raw), expiresAt);
+    }
+
+    public string HashRefreshToken(string rawToken)
+    {
+        // SHA-256 deterministic để tra cứu được (khác password hash có salt).
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(rawToken));
+        return Convert.ToHexString(hash);
+    }
+
+    private static string Base64UrlEncode(byte[] bytes) =>
+        Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 }

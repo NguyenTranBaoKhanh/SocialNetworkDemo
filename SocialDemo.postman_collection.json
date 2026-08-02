@@ -11,6 +11,7 @@
   "variable": [
     { "key": "baseUrl", "value": "http://localhost:5273" },
     { "key": "token", "value": "" },
+    { "key": "refreshToken", "value": "" },
     { "key": "postId", "value": "" },
     { "key": "commentId", "value": "" }
   ],
@@ -28,6 +29,7 @@
                   "if (pm.response.code === 200) {",
                   "  const j = pm.response.json();",
                   "  pm.collectionVariables.set('token', j.token);",
+                  "  pm.collectionVariables.set('refreshToken', j.refreshToken);",
                   "  console.log('Token đã lưu cho user:', j.username);",
                   "}"
                 ],
@@ -69,6 +71,7 @@
                   "if (pm.response.code === 200) {",
                   "  const j = pm.response.json();",
                   "  pm.collectionVariables.set('token', j.token);",
+                  "  pm.collectionVariables.set('refreshToken', j.refreshToken);",
                   "  console.log('Đăng nhập:', j.username);",
                   "}"
                 ],
@@ -85,6 +88,48 @@
               "raw": "{\n  \"usernameOrEmail\": \"alice\",\n  \"password\": \"secret123\"\n}"
             },
             "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "auth", "login"] }
+          }
+        },
+        {
+          "name": "Refresh token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const j = pm.response.json();",
+                  "  pm.collectionVariables.set('token', j.token);",
+                  "  pm.collectionVariables.set('refreshToken', j.refreshToken);",
+                  "  console.log('Đã xoay vòng token');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/auth/refresh", "host": ["{{baseUrl}}"], "path": ["api", "auth", "refresh"] }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/auth/logout", "host": ["{{baseUrl}}"], "path": ["api", "auth", "logout"] }
           }
         }
       ]

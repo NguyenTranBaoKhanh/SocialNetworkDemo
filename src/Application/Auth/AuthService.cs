@@ -46,9 +46,9 @@ public class AuthService
         };
 
         _db.Users.Add(user);
-        await _db.SaveChangesAsync(ct);
+        await _db.SaveChangesAsync(ct);   // lấy user.Id
 
-        return BuildResponse(user);
+        return await IssueTokensAsync(user, ct);
     }
 
     public async Task<AuthResponse> LoginAsync(LoginRequest req, CancellationToken ct = default)
@@ -63,12 +63,85 @@ public class AuthService
         if (!user.IsActive)
             throw new ForbiddenException("Tài khoản đã bị khóa.");
 
-        return BuildResponse(user);
+        return await IssueTokensAsync(user, ct);
     }
 
-    private AuthResponse BuildResponse(User user)
+    /// <summary>Đổi refresh token lấy cặp token mới (xoay vòng — revoke token cũ).</summary>
+    public async Task<AuthResponse> RefreshAsync(RefreshRequest req, CancellationToken ct = default)
     {
-        var (token, expiresAt) = _jwt.Generate(user);
-        return new AuthResponse(token, expiresAt, user.Id, user.Username, user.DisplayName);
+        var hash = _jwt.HashRefreshToken((req.RefreshToken ?? "").Trim());
+
+        var stored = await _db.RefreshTokens
+            .Include(t => t.User)
+            .FirstOrDefaultAsync(t => t.TokenHash == hash, ct);
+
+        if (stored is null)
+            throw new UnauthorizedException("Refresh token không hợp lệ.");
+
+        // Token đã revoke mà vẫn bị dùng -> nghi bị đánh cắp: thu hồi TẤT CẢ token của user.
+        if (stored.RevokedAt is not null)
+        {
+            await RevokeAllForUserAsync(stored.UserId, ct);
+            throw new UnauthorizedException("Refresh token đã bị thu hồi.");
+        }
+
+        if (DateTimeOffset.UtcNow >= stored.ExpiresAt)
+            throw new UnauthorizedException("Refresh token đã hết hạn.");
+
+        // Xoay vòng: revoke cũ, cấp mới.
+        var newRefresh = _jwt.GenerateRefreshToken();
+        stored.RevokedAt = DateTimeOffset.UtcNow;
+        stored.ReplacedByTokenHash = newRefresh.TokenHash;
+        _db.RefreshTokens.Add(new RefreshToken
+        {
+            UserId = stored.UserId,
+            TokenHash = newRefresh.TokenHash,
+            ExpiresAt = newRefresh.ExpiresAt,
+        });
+
+        var (access, expiresAt) = _jwt.GenerateAccessToken(stored.User);
+        await _db.SaveChangesAsync(ct);
+
+        return new AuthResponse(access, expiresAt, newRefresh.RawToken,
+            stored.User.Id, stored.User.Username, stored.User.DisplayName);
+    }
+
+    /// <summary>Thu hồi refresh token (đăng xuất). Idempotent.</summary>
+    public async Task LogoutAsync(LogoutRequest req, CancellationToken ct = default)
+    {
+        var hash = _jwt.HashRefreshToken((req.RefreshToken ?? "").Trim());
+        var stored = await _db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == hash, ct);
+        if (stored is not null && stored.RevokedAt is null)
+        {
+            stored.RevokedAt = DateTimeOffset.UtcNow;
+            await _db.SaveChangesAsync(ct);
+        }
+    }
+
+    private async Task<AuthResponse> IssueTokensAsync(User user, CancellationToken ct)
+    {
+        var (access, expiresAt) = _jwt.GenerateAccessToken(user);
+        var refresh = _jwt.GenerateRefreshToken();
+
+        _db.RefreshTokens.Add(new RefreshToken
+        {
+            UserId = user.Id,
+            TokenHash = refresh.TokenHash,
+            ExpiresAt = refresh.ExpiresAt,
+        });
+        await _db.SaveChangesAsync(ct);
+
+        return new AuthResponse(access, expiresAt, refresh.RawToken,
+            user.Id, user.Username, user.DisplayName);
+    }
+
+    private async Task RevokeAllForUserAsync(long userId, CancellationToken ct)
+    {
+        var active = await _db.RefreshTokens
+            .Where(t => t.UserId == userId && t.RevokedAt == null)
+            .ToListAsync(ct);
+        foreach (var t in active)
+            t.RevokedAt = DateTimeOffset.UtcNow;
+        await _db.SaveChangesAsync(ct);
     }
 }
