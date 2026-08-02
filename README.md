@@ -65,6 +65,21 @@ Kiểm tra: `GET /health` → `{"status":"ok"}`. SignalR hub tại `/hubs/chat`.
 
 > Gửi token qua header `Authorization: Bearer <token>`.
 
+## Test
+
+Integration test dùng **Testcontainers** (bật Postgres thật trong Docker, apply migration, test
+service Application against DB thật — bắt được cả constraint/index/PublicId sinh bởi DB).
+
+```bash
+dotnet test tests/IntegrationTests
+```
+
+> Cần Docker đang chạy. Test tự tạo container Postgres riêng (`socialdemo_test`), không đụng DB dev.
+
+Bao phủ: Auth (register/login, trùng username, citext, validation), Follow (idempotent, tự-follow,
+counter), Like (idempotent, unlike), Post (tạo/media/xóa 403/soft delete), Comment (reply, cursor),
+Feed (fan-out on read, thứ tự, cursor). Tổng **32 test**.
+
 ## Bước tiếp theo (chưa làm)
 
 - [ ] Nối `ChatHub.SendMessage` vào service persist (cấp seq trong transaction) rồi mới broadcast.

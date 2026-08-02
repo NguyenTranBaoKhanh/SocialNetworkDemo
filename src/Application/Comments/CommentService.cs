@@ -92,8 +92,8 @@ public class CommentService
         string? next = null;
         if (items.Count > limit)
         {
-            next = items[^1].Id.ToString();
-            items.RemoveAt(items.Count - 1);
+            items.RemoveAt(items.Count - 1);   // bỏ item thừa (lấy dư 1 để dò trang sau)
+            next = items[^1].Id.ToString();    // cursor = id item CUỐI của trang trả về
         }
 
         return new CursorPage<CommentResponse>(items, next);
