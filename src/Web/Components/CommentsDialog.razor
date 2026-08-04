@@ -1,0 +1,107 @@
+@inject PostApi Api
+
+@* Modal Bootstrap hiển thị/thêm bình luận cho 1 post, không cần chuyển trang. *@
+<div class="modal fade show d-block" tabindex="-1" style="background:rgba(0,0,0,.5)" @onclick="Close">
+    @* stopPropagation để click bên trong modal không đóng. *@
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" @onclick:stopPropagation="true">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Bình luận (@_comments.Count)</h5>
+                <button type="button" class="btn-close" @onclick="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                @if (_loading)
+                {
+                    <p class="text-muted mb-0">Đang tải...</p>
+                }
+                else if (_comments.Count == 0)
+                {
+                    <p class="text-muted mb-0">Chưa có bình luận nào. Hãy là người đầu tiên!</p>
+                }
+                else
+                {
+                    @* Bình luận gốc; mỗi bình luận render đệ quy kèm các trả lời con. *@
+                    @foreach (var root in _comments.Where(c => c.ParentId is null))
+                    {
+                        @RenderThread(root, 0)
+                    }
+                }
+            </div>
+
+            <div class="modal-footer d-block">
+                @if (_replyingTo is not null)
+                {
+                    <div class="small text-muted mb-1">
+                        Đang trả lời <strong>@_replyingTo.Author.DisplayName</strong>
+                        <button class="btn btn-link btn-sm p-0 ms-1" @onclick="CancelReply">Hủy</button>
+                    </div>
+                }
+                <div class="input-group">
+                    <input class="form-control" placeholder="@(_replyingTo is null ? "Viết bình luận..." : "Viết trả lời...")"
+                           @bind="_newComment" @bind:event="oninput" @onkeyup="OnKeyUp" />
+                    <button class="btn btn-primary" @onclick="AddAsync"
+                            disabled="@(_busy || string.IsNullOrWhiteSpace(_newComment))">Gửi</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid PostId { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnCommentAdded { get; set; }
+
+    private readonly List<CommentResponse> _comments = new();
+    private string _newComment = "";
+    private CommentResponse? _replyingTo;   // bình luận đang được trả lời (null = bình luận gốc)
+    private bool _loading = true;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var page = await Api.GetCommentsAsync(PostId);
+        if (page is not null) _comments.AddRange(page.Items);
+        _loading = false;
+    }
+
+    @* Render 1 bình luận + đệ quy các trả lời con. Thụt lề theo độ sâu (giới hạn để không tràn). *@
+    private RenderFragment RenderThread(CommentResponse c, int depth) => @<div
+        class="border-start ps-2 py-2" style="margin-left:@(Math.Min(depth, 6) * 16)px">
+        <strong>@c.Author.DisplayName</strong>
+        <small class="text-muted">@c.CreatedAt.LocalDateTime.ToString("dd/MM HH:mm")</small>
+        <div style="white-space: pre-wrap">@c.Content</div>
+        <button class="btn btn-link btn-sm p-0" @onclick="() => StartReply(c)">Trả lời</button>
+
+        @foreach (var child in _comments.Where(x => x.ParentId == c.Id))
+        {
+            @RenderThread(child, depth + 1)
+        }
+    </div>;
+
+    private void StartReply(CommentResponse target) => _replyingTo = target;
+    private void CancelReply() => _replyingTo = null;
+
+    private async Task OnKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_newComment))
+            await AddAsync();
+    }
+
+    private async Task AddAsync()
+    {
+        _busy = true;
+        var created = await Api.AddCommentAsync(PostId, _newComment, _replyingTo?.Id);
+        if (created is not null)
+        {
+            _comments.Add(created);
+            _newComment = "";
+            _replyingTo = null;
+            await OnCommentAdded.InvokeAsync();   // báo feed tăng đếm
+        }
+        _busy = false;
+    }
+
+    private Task Close() => OnClose.InvokeAsync();
+}

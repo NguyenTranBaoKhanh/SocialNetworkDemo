@@ -55,9 +55,9 @@ else
                             @onclick="() => ToggleLikeAsync(post)">
                         ♥ @post.LikeCount
                     </button>
-                    <a class="btn btn-sm btn-outline-secondary" href="@($"post/{post.Id}")">
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => OpenComments(post)">
                         💬 @post.CommentCount
-                    </a>
+                    </button>
                 </div>
             </div>
         </div>
@@ -71,10 +71,17 @@ else
     }
 }
 
+@* Popup bình luận — chỉ render khi có post đang mở. *@
+@if (_commentsPost is not null)
+{
+    <CommentsDialog PostId="_commentsPost.Id" OnClose="CloseComments" OnCommentAdded="OnCommentAdded" />
+}
+
 @code {
     private readonly List<PostResponse> _posts = new();
     private string? _nextCursor;
     private bool _loading;
+    private PostResponse? _commentsPost;   // post đang mở popup bình luận
 
     protected override Task OnInitializedAsync() => LoadAsync(reset: true);
 
@@ -99,5 +106,20 @@ else
         var result = post.LikedByMe ? await Api.UnlikeAsync(post.Id) : await Api.LikeAsync(post.Id);
         if (result is not null && i >= 0)
             _posts[i] = post with { LikeCount = result.LikeCount, LikedByMe = result.LikedByMe };
+    }
+
+    private void OpenComments(PostResponse post) => _commentsPost = post;
+    private void CloseComments() => _commentsPost = null;
+
+    // Khi thêm bình luận trong popup -> tăng đếm hiển thị ở feed.
+    private void OnCommentAdded()
+    {
+        if (_commentsPost is null) return;
+        var i = _posts.IndexOf(_commentsPost);
+        if (i >= 0)
+        {
+            _posts[i] = _commentsPost with { CommentCount = _commentsPost.CommentCount + 1 };
+            _commentsPost = _posts[i];
+        }
     }
 }
