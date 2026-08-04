@@ -1,0 +1,110 @@
+@inject UserApi UserApi
+
+<div class="modal fade show d-block" tabindex="-1" style="background:rgba(0,0,0,.5)" @onclick="Close">
+    <div class="modal-dialog modal-dialog-centered" @onclick:stopPropagation="true">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Chỉnh sửa hồ sơ</h5>
+                <button type="button" class="btn-close" @onclick="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                <h6>Thông tin</h6>
+                <div class="mb-2">
+                    <label class="form-label">Tên hiển thị</label>
+                    <input class="form-control" @bind="_displayName" @bind:event="oninput" />
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">Giới thiệu (bio)</label>
+                    <textarea class="form-control" rows="3" @bind="_bio" @bind:event="oninput"></textarea>
+                </div>
+                @if (_profileError is not null)
+                {
+                    <div class="alert alert-danger py-2">@_profileError</div>
+                }
+                <button class="btn btn-primary btn-sm" @onclick="SaveProfileAsync"
+                        disabled="@(_busyProfile || string.IsNullOrWhiteSpace(_displayName))">
+                    @(_busyProfile ? "Đang lưu..." : "Lưu hồ sơ")
+                </button>
+
+                <hr />
+
+                <h6>Đổi mật khẩu</h6>
+                <div class="mb-2">
+                    <input type="password" class="form-control" placeholder="Mật khẩu hiện tại"
+                           @bind="_curPwd" @bind:event="oninput" />
+                </div>
+                <div class="mb-2">
+                    <input type="password" class="form-control" placeholder="Mật khẩu mới (≥ 6 ký tự)"
+                           @bind="_newPwd" @bind:event="oninput" />
+                </div>
+                @if (_pwdMsg is not null)
+                {
+                    <div class="alert @(_pwdOk ? "alert-success" : "alert-danger") py-2">@_pwdMsg</div>
+                }
+                <button class="btn btn-outline-primary btn-sm" @onclick="ChangePasswordAsync"
+                        disabled="@(_busyPwd || string.IsNullOrWhiteSpace(_curPwd) || string.IsNullOrWhiteSpace(_newPwd))">
+                    @(_busyPwd ? "Đang đổi..." : "Đổi mật khẩu")
+                </button>
+                @if (_pwdOk)
+                {
+                    <div class="small text-muted mt-1">Các phiên đăng nhập khác sẽ bị đăng xuất.</div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string DisplayName { get; set; } = "";
+    [Parameter] public string Bio { get; set; } = "";
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<UpdateProfileRequest> OnSaved { get; set; }
+
+    private string _displayName = "";
+    private string _bio = "";
+    private string? _profileError;
+    private bool _busyProfile;
+
+    private string _curPwd = "";
+    private string _newPwd = "";
+    private string? _pwdMsg;
+    private bool _pwdOk;
+    private bool _busyPwd;
+
+    protected override void OnInitialized()
+    {
+        _displayName = DisplayName;
+        _bio = Bio;
+    }
+
+    private async Task SaveProfileAsync()
+    {
+        _busyProfile = true;
+        _profileError = await UserApi.UpdateProfileAsync(_displayName, _bio);
+        _busyProfile = false;
+        if (_profileError is null)
+            await OnSaved.InvokeAsync(new UpdateProfileRequest(_displayName.Trim(), _bio.Trim()));
+    }
+
+    private async Task ChangePasswordAsync()
+    {
+        _busyPwd = true;
+        var err = await UserApi.ChangePasswordAsync(_curPwd, _newPwd);
+        _busyPwd = false;
+        if (err is null)
+        {
+            _pwdOk = true;
+            _pwdMsg = "Đổi mật khẩu thành công.";
+            _curPwd = "";
+            _newPwd = "";
+        }
+        else
+        {
+            _pwdOk = false;
+            _pwdMsg = err;
+        }
+    }
+
+    private Task Close() => OnClose.InvokeAsync();
+}

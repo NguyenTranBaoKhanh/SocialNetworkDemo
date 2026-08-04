@@ -1,8 +1,6 @@
 @page "/"
 @attribute [Authorize]
 @inject PostApi Api
-@inject ClientSettings Settings
-@inject NavigationManager Nav
 
 <PageTitle>Feed</PageTitle>
 
@@ -27,42 +25,7 @@ else
 {
     @foreach (var post in _posts)
     {
-        <div class="card mb-3">
-            <div class="card-body">
-                <div class="d-flex justify-content-between">
-                    <strong>@post.Author.DisplayName <span class="text-muted fw-normal">@("@")@post.Author.Username</span></strong>
-                    <small class="text-muted">@post.CreatedAt.LocalDateTime.ToString("dd/MM/yyyy HH:mm")</small>
-                </div>
-                <p class="my-2" style="white-space: pre-wrap">@post.Content</p>
-                @if (post.Media.Count > 0)
-                {
-                    <div class="d-flex flex-wrap gap-2 mb-2">
-                        @foreach (var m in post.Media)
-                        {
-                            @if (m.MediaType == "video")
-                            {
-                                <video src="@Settings.MediaUrl(m.Url)" controls
-                                       class="rounded border" style="max-width:100%;max-height:400px"></video>
-                            }
-                            else
-                            {
-                                <img src="@Settings.MediaUrl(m.Url)" class="rounded border"
-                                     style="max-width:100%;max-height:400px;object-fit:cover" />
-                            }
-                        }
-                    </div>
-                }
-                <div class="d-flex gap-3 align-items-center">
-                    <button class="btn btn-sm @(post.LikedByMe ? "btn-danger" : "btn-outline-danger")"
-                            @onclick="() => ToggleLikeAsync(post)">
-                        ♥ @post.LikeCount
-                    </button>
-                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => OpenComments(post)">
-                        💬 @post.CommentCount
-                    </button>
-                </div>
-            </div>
-        </div>
+        <PostCard @key="post.Id" Post="post" />
     }
 
     @if (_nextCursor is not null)
@@ -79,18 +42,11 @@ else
     <CreatePostDialog OnClose="CloseCreate" OnCreated="OnPostCreated" />
 }
 
-@* Popup bình luận — chỉ render khi có post đang mở. *@
-@if (_commentsPost is not null)
-{
-    <CommentsDialog PostId="_commentsPost.Id" OnClose="CloseComments" OnCommentAdded="OnCommentAdded" />
-}
-
 @code {
     private readonly List<PostResponse> _posts = new();
     private string? _nextCursor;
     private bool _loading;
-    private bool _showCreate;              // đang mở popup tạo bài
-    private PostResponse? _commentsPost;   // post đang mở popup bình luận
+    private bool _showCreate;
 
     protected override Task OnInitializedAsync() => LoadAsync(reset: true);
 
@@ -109,14 +65,6 @@ else
         _loading = false;
     }
 
-    private async Task ToggleLikeAsync(PostResponse post)
-    {
-        var i = _posts.IndexOf(post);
-        var result = post.LikedByMe ? await Api.UnlikeAsync(post.Id) : await Api.LikeAsync(post.Id);
-        if (result is not null && i >= 0)
-            _posts[i] = post with { LikeCount = result.LikeCount, LikedByMe = result.LikedByMe };
-    }
-
     private void OpenCreate() => _showCreate = true;
     private void CloseCreate() => _showCreate = false;
 
@@ -125,20 +73,5 @@ else
     {
         _posts.Insert(0, post);
         _showCreate = false;
-    }
-
-    private void OpenComments(PostResponse post) => _commentsPost = post;
-    private void CloseComments() => _commentsPost = null;
-
-    // Khi thêm bình luận trong popup -> tăng đếm hiển thị ở feed.
-    private void OnCommentAdded()
-    {
-        if (_commentsPost is null) return;
-        var i = _posts.IndexOf(_commentsPost);
-        if (i >= 0)
-        {
-            _posts[i] = _commentsPost with { CommentCount = _commentsPost.CommentCount + 1 };
-            _commentsPost = _posts[i];
-        }
     }
 }

@@ -1,0 +1,70 @@
+@inject PostApi Api
+@inject ClientSettings Settings
+
+@* Thẻ hiển thị 1 bài: tác giả (link profile), nội dung, media, like, bình luận (popup). Tự quản lý trạng thái. *@
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="d-flex justify-content-between">
+            <strong>
+                <a href="@($"u/{_post.Author.Username}")" class="text-decoration-none">@_post.Author.DisplayName</a>
+                <span class="text-muted fw-normal">@("@")@_post.Author.Username</span>
+            </strong>
+            <small class="text-muted">@_post.CreatedAt.LocalDateTime.ToString("dd/MM/yyyy HH:mm")</small>
+        </div>
+
+        <p class="my-2" style="white-space: pre-wrap">@_post.Content</p>
+
+        @if (_post.Media.Count > 0)
+        {
+            <div class="d-flex flex-wrap gap-2 mb-2">
+                @foreach (var m in _post.Media)
+                {
+                    @if (m.MediaType == "video")
+                    {
+                        <video src="@Settings.MediaUrl(m.Url)" controls
+                               class="rounded border" style="max-width:100%;max-height:400px"></video>
+                    }
+                    else
+                    {
+                        <img src="@Settings.MediaUrl(m.Url)" class="rounded border"
+                             style="max-width:100%;max-height:400px;object-fit:cover" />
+                    }
+                }
+            </div>
+        }
+
+        <div class="d-flex gap-3 align-items-center">
+            <button class="btn btn-sm @(_post.LikedByMe ? "btn-danger" : "btn-outline-danger")"
+                    @onclick="ToggleLikeAsync">
+                ♥ @_post.LikeCount
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" @onclick="() => _showComments = true">
+                💬 @_post.CommentCount
+            </button>
+        </div>
+    </div>
+</div>
+
+@if (_showComments)
+{
+    <CommentsDialog PostId="_post.Id" OnClose="() => _showComments = false" OnCommentAdded="OnCommentAdded" />
+}
+
+@code {
+    [Parameter, EditorRequired] public PostResponse Post { get; set; } = default!;
+
+    private PostResponse _post = default!;
+    private bool _showComments;
+
+    protected override void OnInitialized() => _post = Post;
+
+    private async Task ToggleLikeAsync()
+    {
+        var result = _post.LikedByMe ? await Api.UnlikeAsync(_post.Id) : await Api.LikeAsync(_post.Id);
+        if (result is not null)
+            _post = _post with { LikeCount = result.LikeCount, LikedByMe = result.LikedByMe };
+    }
+
+    private void OnCommentAdded()
+        => _post = _post with { CommentCount = _post.CommentCount + 1 };
+}

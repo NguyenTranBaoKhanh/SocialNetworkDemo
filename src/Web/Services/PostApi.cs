@@ -21,6 +21,14 @@ public class PostApi
     public async Task<PostResponse?> GetPostAsync(Guid id)
         => await _http.GetFromJsonAsync<PostResponse>($"api/posts/{id}");
 
+    public async Task<CursorPage<PostResponse>?> GetUserPostsAsync(string username, string? cursor = null, int limit = 20)
+    {
+        var url = $"api/users/{username}/posts?limit={limit}";
+        if (!string.IsNullOrWhiteSpace(cursor))
+            url += $"&cursor={Uri.EscapeDataString(cursor)}";
+        return await _http.GetFromJsonAsync<CursorPage<PostResponse>>(url);
+    }
+
     public async Task<PostResponse?> CreatePostAsync(string content, List<CreateMediaDto>? media = null)
     {
         var res = await _http.PostAsJsonAsync("api/posts", new CreatePostRequest(content, media));

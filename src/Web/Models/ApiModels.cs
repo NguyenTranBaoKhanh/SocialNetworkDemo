@@ -17,8 +17,19 @@ public record AuthResponse(
 public record AuthorDto(long Id, string Username, string DisplayName, string? AvatarUrl);
 
 public record UserProfile(
-    long Id, string Username, string DisplayName, string? AvatarUrl,
+    long Id, string Username, string DisplayName, string Bio, string? AvatarUrl,
     int FollowerCount, int FollowingCount, int PostCount);
+
+public record UserProfileView(
+    long Id, string Username, string DisplayName, string Bio, string? AvatarUrl,
+    int FollowerCount, int FollowingCount, int PostCount,
+    bool IsMe, bool IsFollowedByMe);
+
+public record UserSummary(long Id, string Username, string DisplayName, string? AvatarUrl);
+
+public record UpdateAvatarRequest(string Url);
+public record UpdateProfileRequest(string DisplayName, string Bio);
+public record ChangePasswordRequest(string CurrentPassword, string NewPassword);
 
 public record MediaDto(string Url, string MediaType, int? Width, int? Height, short Position);
 

@@ -132,6 +132,13 @@ Mở trình duyệt vào **`http://localhost:5073`** → **Đăng ký** một t�
 | POST/DELETE | `/api/posts/{id}/like` | ✓ | Like / unlike (idempotent) |
 | POST/DELETE | `/api/users/{username}/follow` | ✓ | Follow / unfollow (chống tự-follow) |
 | GET | `/api/feed?cursor=&limit=` | ✓ | Feed fan-out on read, cursor pagination |
+| GET | `/api/users/me` | ✓ | Profile user hiện tại (cho sidebar) |
+| PUT | `/api/users/me` | ✓ | Cập nhật tên hiển thị + bio |
+| PUT | `/api/users/me/avatar` | ✓ | Đổi avatar (url ảnh đã upload) |
+| POST | `/api/users/me/password` | ✓ | Đổi mật khẩu (thu hồi refresh token) |
+| GET | `/api/users/{username}` | ✓ | Profile user (kèm isMe / isFollowedByMe) |
+| GET | `/api/users/{username}/posts` | ✓ | Bài của user (cursor pagination) |
+| GET | `/api/users/suggestions` | ✓ | Gợi ý follow |
 
 > Gửi access token qua header `Authorization: Bearer <token>`.
 
@@ -148,8 +155,10 @@ Chạy (cần backend chạy trước):
 dotnet run --project src/Web
 ```
 
-Mở **`http://localhost:5073`**. Đã có: đăng ký/đăng nhập, feed (cursor pagination + like),
-tạo bài **kèm ảnh/video** (upload lên MinIO), chi tiết bài + comment. Đổi địa chỉ API trong
+Mở **`http://localhost:5073`**. Đã có: đăng ký/đăng nhập, sidebar (avatar + gợi ý follow),
+feed (like), tạo bài **kèm ảnh/video** (popup), bình luận **trả lời đa cấp** (popup), trang
+**profile** (`/u/{username}`) với đổi avatar / follow / **chỉnh sửa hồ sơ** (tên, bio) / **đổi mật khẩu**.
+Đổi địa chỉ API trong
 `src/Web/wwwroot/appsettings.json` (`ApiBaseUrl` / `ApiBaseUrlHttps`) — không cần build lại.
 
 > Upload media cần **MinIO** đang chạy (`docker compose up -d minio`). Ảnh/video phục vụ qua API
@@ -165,9 +174,11 @@ tạo bài **kèm ảnh/video** (upload lên MinIO), chi tiết bài + comment. 
 | `Auth/JwtAuthenticationStateProvider.cs` | Đọc claim từ JWT → Blazor biết đã đăng nhập chưa (điều khiển `<AuthorizeView>`). |
 | `Auth/AuthorizedHandler.cs` | **Điểm cốt lõi**: gắn `Bearer` vào mỗi request; gặp **401** thì tự gọi `/api/auth/refresh`, lấy token mới rồi **thử lại request** — người dùng không bị đá ra. |
 | `Services/AuthApi.cs`, `Services/PostApi.cs`, `Services/MediaApi.cs` | Gọi API auth / post-feed-like-comment / upload media. |
-| `Pages/*.razor` | Login, Register, Home (feed), PostDetail. |
+| `Pages/*.razor` | Login, Register, Home (feed), PostDetail, **Profile** (`/u/{username}`). |
+| `Layout/MainLayout.razor` | **Sidebar trái**: avatar + tên user (link profile), gợi ý follow, đăng xuất. |
+| `Components/PostCard.razor` | Thẻ 1 bài (dùng chung feed & profile): tên tác giả link profile, media, like, mở popup bình luận — **tự quản lý trạng thái**. |
 | `Components/CreatePostDialog.razor` | **Popup** tạo bài (nội dung + ảnh/video), mở từ feed — không chuyển trang; đăng xong thêm bài lên đầu feed. |
-| `Components/CommentsDialog.razor` | **Popup** bình luận: xem/thêm bình luận + **trả lời đa cấp** (render đệ quy), mở từ nút 💬 ở feed. |
+| `Components/CommentsDialog.razor` | **Popup** bình luận: xem/thêm bình luận + **trả lời đa cấp** (render đệ quy), mở từ nút 💬. |
 | `App.razor` | `<CascadingAuthenticationState>` + `<AuthorizeRouteView>`: trang có `[Authorize]` mà chưa login → tự chuyển về `/login`. |
 
 > Tạo bài và bình luận đều là **popup ngay tại feed** (component trong `Components/`), không rời trang.
@@ -211,6 +222,6 @@ Tổng **38 test**.
 - [ ] Nối `ChatHub.SendMessage` vào service persist (cấp seq trong transaction) rồi mới broadcast +
       màn chat ở frontend.
 - [ ] Worker flush like counter từ Redis xuống DB (hiện counter cập nhật trực tiếp trong request).
-- [ ] Endpoint + màn profile user, list follower/following.
+- [ ] Trang danh sách follower/following (số đếm đã có, chưa có màn liệt kê).
 - [ ] Media: encode video bằng FFmpeg qua queue (hiện lưu thẳng); resize ảnh (ImageSharp); CDN;
       range request cho video (seek). (Ảnh + video cơ bản đã xong.)

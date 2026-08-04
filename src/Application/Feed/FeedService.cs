@@ -1,5 +1,6 @@
 using Application.Common;
 using Application.Posts;
+using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Feed;
@@ -20,32 +21,58 @@ public class FeedService
         _current = current;
     }
 
+    /// <summary>Feed của user hiện tại: bài của người mình follow + của chính mình.</summary>
     public async Task<CursorPage<PostResponse>> GetAsync(
         string? cursor, int limit = 20, CancellationToken ct = default)
     {
         var meId = _current.Id ?? throw new UnauthorizedException("Cần đăng nhập.");
-        limit = Math.Clamp(limit, 1, 50);
 
-        // Tập tác giả: những người mình follow + chính mình.
         var authorIds = await _db.Follows
             .Where(f => f.FollowerId == meId)
             .Select(f => f.FolloweeId)
             .ToListAsync(ct);
         authorIds.Add(meId);
 
-        var query = _db.Posts.AsNoTracking()
+        var baseQuery = _db.Posts.AsNoTracking()
             .Where(p => p.DeletedAt == null && authorIds.Contains(p.AuthorId));
+
+        return await PageAsync(baseQuery, cursor, limit, meId, ct);
+    }
+
+    /// <summary>Bài của một user theo username (trang profile).</summary>
+    public async Task<CursorPage<PostResponse>> GetUserPostsAsync(
+        string username, string? cursor, int limit = 20, CancellationToken ct = default)
+    {
+        var meId = _current.Id ?? throw new UnauthorizedException("Cần đăng nhập.");
+
+        var authorId = await _db.Users
+            .Where(u => u.Username == username.Trim())
+            .Select(u => (long?)u.Id)
+            .FirstOrDefaultAsync(ct)
+            ?? throw new NotFoundException("Không tìm thấy user.");
+
+        var baseQuery = _db.Posts.AsNoTracking()
+            .Where(p => p.DeletedAt == null && p.AuthorId == authorId);
+
+        return await PageAsync(baseQuery, cursor, limit, meId, ct);
+    }
+
+    /// <summary>Phân trang cursor + projection dùng chung.</summary>
+    private async Task<CursorPage<PostResponse>> PageAsync(
+        IQueryable<Post> baseQuery, string? cursor, int limit, long meId, CancellationToken ct)
+    {
+        limit = Math.Clamp(limit, 1, 50);
 
         // Giải mã cursor "createdAtTicks_id" -> lấy post cũ hơn mốc này.
         if (TryDecode(cursor, out var afterTicks, out var afterId))
         {
             var afterTime = new DateTimeOffset(afterTicks, TimeSpan.Zero);
-            query = query.Where(p =>
+            baseQuery = baseQuery.Where(p =>
                 p.CreatedAt < afterTime ||
                 (p.CreatedAt == afterTime && p.Id < afterId));
         }
 
-        var rows = await query
+        var rows = await baseQuery
             .OrderByDescending(p => p.CreatedAt).ThenByDescending(p => p.Id)
             .Take(limit + 1)
             .Select(p => new

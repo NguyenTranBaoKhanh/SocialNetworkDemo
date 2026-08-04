@@ -88,6 +88,33 @@
     width: 100%;
 }
 
+.suggestions {
+    margin-bottom: 1rem;
+}
+
+.suggestions-title {
+    font-size: .8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #6c757d;
+    margin-bottom: .5rem;
+}
+
+.suggestion-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .4rem;
+    margin-bottom: .4rem;
+}
+
+.suggestion-name {
+    font-size: .85rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .content {
     flex: 1;
     min-width: 0;

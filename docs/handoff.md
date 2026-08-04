@@ -35,6 +35,9 @@ like, follow, feed. Có khung chat SignalR (chưa chạy thật). Build sạch, 
   ảnh từ MinIO), migrations, `DependencyInjection.cs`.
 - `Api/Controllers/MediaController.cs` — `POST /api/media` upload ảnh (≤5MB) hoặc video (≤50MB)
   lên MinIO, `GET /api/media/{key}` phục vụ media cho `<img>`/`<video>` (không cần token).
+- `Application/Users/UserService.cs` + `Api/Controllers/UsersController.cs` — GET `/api/users/me`,
+  `/api/users/{username}` (kèm isMe/isFollowedByMe), `/api/users/{username}/posts`, `/api/users/suggestions`;
+  PUT `/api/users/me` (tên+bio), PUT `/api/users/me/avatar`, POST `/api/users/me/password` (thu hồi refresh token).
 - `Api/*` — `Program.cs` (wiring: DI, JWT, CORS, SignalR), `Controllers/*`, `Hubs/ChatHub.cs`,
   `Common/` (CurrentUser đọc JWT claim, AppExceptionHandler map lỗi → ProblemDetails).
 
@@ -48,12 +51,17 @@ like, follow, feed. Có khung chat SignalR (chưa chạy thật). Build sạch, 
 - `Services/AuthApi.cs` (login/register/logout/refresh), `Services/PostApi.cs` (feed/post/like/comment),
   `Services/MediaApi.cs` (upload ảnh/video multipart).
 - `Models/ApiModels.cs` — record C# khớp DTO của backend (client tự định nghĩa lại).
-- `Pages/` — Login, Register, Home (feed), PostDetail (xem 1 bài qua URL).
-- `Components/CreatePostDialog.razor` — **popup** tạo bài (nội dung + ảnh/video), mở từ feed, đăng xong
-  thêm bài lên đầu feed (không chuyển trang; trang `/create` cũ đã bỏ).
-- `Components/CommentsDialog.razor` — **popup** bình luận + **trả lời đa cấp** (render đệ quy theo `parentId`),
-  mở từ nút 💬 ở feed (không chuyển trang).
-- `ClientSettings.cs` — giữ ApiBaseUrl để ghép URL ảnh/video tuyệt đối cho `<img>`/`<video>`.
+- `Pages/` — Login, Register, Home (feed), PostDetail, **Profile** (`/u/{username}`: header + bio,
+  đổi avatar / chỉnh sửa hồ sơ (tên+bio) / đổi mật khẩu nếu là mình; follow nếu người khác; bài của user).
+- `Components/EditProfileDialog.razor` — popup sửa tên+bio và đổi mật khẩu.
+- `Layout/MainLayout.razor` — **sidebar trái**: avatar + tên (link profile), **gợi ý follow** (nút Follow), đăng xuất.
+- `Components/PostCard.razor` — thẻ 1 bài dùng chung feed & profile; tự quản lý like + popup bình luận;
+  tên tác giả link tới `/u/{username}`.
+- `Components/CreatePostDialog.razor` — **popup** tạo bài (nội dung + ảnh/video), đăng xong thêm bài
+  lên đầu feed (trang `/create` cũ đã bỏ).
+- `Components/CommentsDialog.razor` — **popup** bình luận + **trả lời đa cấp** (render đệ quy theo `parentId`).
+- `Services/UserApi.cs` — me/profile/suggestions/avatar/follow; `PostApi.GetUserPostsAsync` (bài của user).
+- `ClientSettings.cs` — giữ ApiBaseUrl để ghép URL ảnh/video/avatar tuyệt đối.
 - `Layout/MainLayout.razor` — navbar dùng `<AuthorizeView>` để hiện login/logout theo trạng thái.
 - `App.razor` — `<CascadingAuthenticationState>` + `<AuthorizeRouteView>` (chưa login → RedirectToLogin).
 
@@ -102,7 +110,8 @@ like, follow, feed. Có khung chat SignalR (chưa chạy thật). Build sạch, 
 ## Chưa làm (nếu chuyển từ học sang làm tiếp)
 - ChatHub chưa persist/gửi message thật (mới join/typing) — frontend cũng chưa có màn chat.
 - Chưa có worker flush counter từ Redis (counter cập nhật trực tiếp trong request).
-- Chưa có màn profile user / list follower-following (backend cũng chưa có endpoint này).
+- Có trang profile + đổi avatar + follow + gợi ý follow. Chưa có màn **liệt kê** follower/following
+  (mới có số đếm). Đổi avatar chưa cập nhật ngay ở sidebar (cần reload).
 - Media hỗ trợ **ảnh + video** (lưu thẳng). Chưa encode video (FFmpeg qua queue), chưa resize ảnh
   (ImageSharp), chưa CDN, chưa range request cho video (seek) — đúng roadmap, để Phase sau.
 

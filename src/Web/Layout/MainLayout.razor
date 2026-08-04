@@ -13,7 +13,7 @@
         <AuthorizeView>
             <Authorized>
                 @{ var name = _me?.DisplayName ?? context.User.Identity?.Name ?? "?"; }
-                <div class="user-box">
+                <a class="user-box text-decoration-none text-reset" href="@($"u/{_me?.Username ?? context.User.Identity?.Name}")">
                     @if (!string.IsNullOrEmpty(_me?.AvatarUrl))
                     {
                         <img class="avatar" src="@Settings.MediaUrl(_me!.AvatarUrl!)" alt="avatar" />
@@ -26,11 +26,27 @@
                         <div class="user-name">@name</div>
                         <div class="user-handle">@("@")@(_me?.Username ?? context.User.Identity?.Name)</div>
                     </div>
-                </div>
+                </a>
 
                 <nav class="nav-links">
                     <a href="">🏠 Feed</a>
                 </nav>
+
+                @if (_suggestions.Count > 0)
+                {
+                    <div class="suggestions">
+                        <div class="suggestions-title">Gợi ý theo dõi</div>
+                        @foreach (var s in _suggestions)
+                        {
+                            <div class="suggestion-item">
+                                <a href="@($"u/{s.Username}")" class="suggestion-name text-decoration-none text-reset">
+                                    @s.DisplayName <span class="text-muted">@("@")@s.Username</span>
+                                </a>
+                                <button class="btn btn-primary btn-sm py-0" @onclick="() => FollowAsync(s)">Follow</button>
+                            </div>
+                        }
+                    </div>
+                }
 
                 <button class="btn btn-outline-secondary btn-sm logout" @onclick="LogoutAsync">Đăng xuất</button>
             </Authorized>
@@ -52,6 +68,7 @@
 
 @code {
     private UserProfile? _me;
+    private List<UserSummary> _suggestions = new();
 
     protected override void OnInitialized()
         => AuthState.AuthenticationStateChanged += OnAuthChanged;
@@ -67,9 +84,22 @@
     private async Task LoadMeAsync()
     {
         var state = await AuthState.GetAuthenticationStateAsync();
-        _me = state.User.Identity?.IsAuthenticated == true
-            ? await UserApi.GetMeAsync()
-            : null;
+        if (state.User.Identity?.IsAuthenticated == true)
+        {
+            _me = await UserApi.GetMeAsync();
+            _suggestions = await UserApi.GetSuggestionsAsync();
+        }
+        else
+        {
+            _me = null;
+            _suggestions = new();
+        }
+    }
+
+    private async Task FollowAsync(UserSummary s)
+    {
+        await UserApi.FollowAsync(s.Username);
+        _suggestions.Remove(s);   // ẩn khỏi gợi ý sau khi follow
     }
 
     private async Task LogoutAsync()
