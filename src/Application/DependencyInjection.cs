@@ -4,6 +4,7 @@ using Application.Feed;
 using Application.Follows;
 using Application.Likes;
 using Application.Posts;
+using Application.Users;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Application;
@@ -18,6 +19,7 @@ public static class DependencyInjection
         services.AddScoped<LikeService>();
         services.AddScoped<FollowService>();
         services.AddScoped<FeedService>();
+        services.AddScoped<UserService>();
         return services;
     }
 }

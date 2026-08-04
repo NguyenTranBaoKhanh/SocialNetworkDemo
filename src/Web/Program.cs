@@ -42,5 +42,6 @@ builder.Services.AddSingleton(new ClientSettings { ApiBaseUrl = apiBase });
 builder.Services.AddScoped<AuthApi>();
 builder.Services.AddScoped<PostApi>();
 builder.Services.AddScoped<MediaApi>();
+builder.Services.AddScoped<UserApi>();
 
 await builder.Build().RunAsync();

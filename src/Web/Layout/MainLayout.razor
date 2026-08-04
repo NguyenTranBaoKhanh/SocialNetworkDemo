@@ -1,34 +1,83 @@
 @inherits LayoutComponentBase
+@implements IDisposable
 @inject AuthApi Auth
+@inject UserApi UserApi
+@inject ClientSettings Settings
+@inject AuthenticationStateProvider AuthState
 @inject NavigationManager Nav
 
-<div class="page">
-    <nav class="navbar navbar-expand navbar-dark bg-primary px-3">
-        <a class="navbar-brand" href="">SocialDemo</a>
-        <div class="navbar-nav flex-row gap-3 ms-auto align-items-center">
-            <AuthorizeView>
-                <Authorized>
-                    <a class="nav-link text-white" href="">Feed</a>
-                    <span class="text-white-50 small">@context.User.Identity?.Name</span>
-                    <button class="btn btn-sm btn-outline-light" @onclick="LogoutAsync">Đăng xuất</button>
-                </Authorized>
-                <NotAuthorized>
-                    <a class="nav-link text-white" href="login">Đăng nhập</a>
-                    <a class="nav-link text-white" href="register">Đăng ký</a>
-                </NotAuthorized>
-            </AuthorizeView>
-        </div>
-    </nav>
+<div class="app">
+    <aside class="sidebar">
+        <div class="brand">SocialDemo</div>
 
-    <main class="container py-4">
-        @Body
+        <AuthorizeView>
+            <Authorized>
+                @{ var name = _me?.DisplayName ?? context.User.Identity?.Name ?? "?"; }
+                <div class="user-box">
+                    @if (!string.IsNullOrEmpty(_me?.AvatarUrl))
+                    {
+                        <img class="avatar" src="@Settings.MediaUrl(_me!.AvatarUrl!)" alt="avatar" />
+                    }
+                    else
+                    {
+                        <div class="avatar avatar-initial">@name.Substring(0, 1).ToUpper()</div>
+                    }
+                    <div class="user-meta">
+                        <div class="user-name">@name</div>
+                        <div class="user-handle">@("@")@(_me?.Username ?? context.User.Identity?.Name)</div>
+                    </div>
+                </div>
+
+                <nav class="nav-links">
+                    <a href="">🏠 Feed</a>
+                </nav>
+
+                <button class="btn btn-outline-secondary btn-sm logout" @onclick="LogoutAsync">Đăng xuất</button>
+            </Authorized>
+            <NotAuthorized>
+                <nav class="nav-links">
+                    <a href="login">Đăng nhập</a>
+                    <a href="register">Đăng ký</a>
+                </nav>
+            </NotAuthorized>
+        </AuthorizeView>
+    </aside>
+
+    <main class="content">
+        <div class="content-inner">
+            @Body
+        </div>
     </main>
 </div>
 
 @code {
+    private UserProfile? _me;
+
+    protected override void OnInitialized()
+        => AuthState.AuthenticationStateChanged += OnAuthChanged;
+
+    protected override async Task OnInitializedAsync() => await LoadMeAsync();
+
+    private async void OnAuthChanged(Task<AuthenticationState> _)
+    {
+        await LoadMeAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadMeAsync()
+    {
+        var state = await AuthState.GetAuthenticationStateAsync();
+        _me = state.User.Identity?.IsAuthenticated == true
+            ? await UserApi.GetMeAsync()
+            : null;
+    }
+
     private async Task LogoutAsync()
     {
         await Auth.LogoutAsync();
+        _me = null;
         Nav.NavigateTo("login");
     }
+
+    public void Dispose() => AuthState.AuthenticationStateChanged -= OnAuthChanged;
 }

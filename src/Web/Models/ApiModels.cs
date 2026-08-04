@@ -16,6 +16,10 @@ public record AuthResponse(
 
 public record AuthorDto(long Id, string Username, string DisplayName, string? AvatarUrl);
 
+public record UserProfile(
+    long Id, string Username, string DisplayName, string? AvatarUrl,
+    int FollowerCount, int FollowingCount, int PostCount);
+
 public record MediaDto(string Url, string MediaType, int? Width, int? Height, short Position);
 
 public record PostResponse(
