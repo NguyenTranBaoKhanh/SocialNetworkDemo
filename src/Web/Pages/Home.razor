@@ -1,6 +1,7 @@
 @page "/"
 @attribute [Authorize]
 @inject PostApi Api
+@inject ClientSettings Settings
 @inject NavigationManager Nav
 
 <PageTitle>Feed</PageTitle>
@@ -31,6 +32,16 @@ else
                     <small class="text-muted">@post.CreatedAt.LocalDateTime.ToString("dd/MM/yyyy HH:mm")</small>
                 </div>
                 <p class="my-2" style="white-space: pre-wrap">@post.Content</p>
+                @if (post.Media.Count > 0)
+                {
+                    <div class="d-flex flex-wrap gap-2 mb-2">
+                        @foreach (var m in post.Media)
+                        {
+                            <img src="@Settings.MediaUrl(m.Url)" class="rounded border"
+                                 style="max-width:100%;max-height:400px;object-fit:cover" />
+                        }
+                    </div>
+                }
                 <div class="d-flex gap-3 align-items-center">
                     <button class="btn btn-sm @(post.LikedByMe ? "btn-danger" : "btn-outline-danger")"
                             @onclick="() => ToggleLikeAsync(post)">

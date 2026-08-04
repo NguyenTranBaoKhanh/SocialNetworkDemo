@@ -1,6 +1,7 @@
 using Application.Common;
 using Infrastructure.Persistence;
 using Infrastructure.Security;
+using Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -29,6 +30,10 @@ public static class DependencyInjection
         services.Configure<JwtOptions>(config.GetSection(JwtOptions.SectionName));
         services.AddSingleton<IPasswordHasher, PasswordHasherAdapter>();
         services.AddSingleton<IJwtTokenGenerator, JwtTokenGenerator>();
+
+        // Storage media (MinIO/S3)
+        services.Configure<MinioOptions>(config.GetSection(MinioOptions.SectionName));
+        services.AddSingleton<IStorageService, S3StorageService>();
 
         return services;
     }

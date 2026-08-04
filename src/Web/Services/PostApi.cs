@@ -21,9 +21,9 @@ public class PostApi
     public async Task<PostResponse?> GetPostAsync(Guid id)
         => await _http.GetFromJsonAsync<PostResponse>($"api/posts/{id}");
 
-    public async Task<PostResponse?> CreatePostAsync(string content)
+    public async Task<PostResponse?> CreatePostAsync(string content, List<CreateMediaDto>? media = null)
     {
-        var res = await _http.PostAsJsonAsync("api/posts", new CreatePostRequest(content, null));
+        var res = await _http.PostAsJsonAsync("api/posts", new CreatePostRequest(content, media));
         res.EnsureSuccessStatusCode();
         return await res.Content.ReadFromJsonAsync<PostResponse>();
     }

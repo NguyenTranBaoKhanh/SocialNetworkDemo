@@ -35,8 +35,12 @@ builder.Services.AddHttpClient("Api", c => c.BaseAddress = new Uri(apiBase));
 builder.Services.AddHttpClient("AuthorizedApi", c => c.BaseAddress = new Uri(apiBase))
     .AddHttpMessageHandler<AuthorizedHandler>();
 
+// Cấu hình client dùng chung (ghép URL ảnh tuyệt đối).
+builder.Services.AddSingleton(new ClientSettings { ApiBaseUrl = apiBase });
+
 // Service gọi API.
 builder.Services.AddScoped<AuthApi>();
 builder.Services.AddScoped<PostApi>();
+builder.Services.AddScoped<MediaApi>();
 
 await builder.Build().RunAsync();

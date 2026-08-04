@@ -46,10 +46,11 @@ git clone https://github.com/NguyenTranBaoKhanh/SocialNetworkDemo.git
 Chạy tại thư mục gốc dự án:
 
 ```bash
-docker compose up -d postgres redis
+docker compose up -d postgres redis minio
 ```
 
 > Postgres map ra cổng **5433**, Redis **6380** (khác mặc định để tránh đụng dịch vụ sẵn có).
+> **MinIO** (lưu ảnh) ở cổng **9000** (API) / **9001** (console `minioadmin`/`minioadmin`).
 > Connection string đã trỏ đúng, không cần chỉnh.
 
 ### 3. Tạo schema database (apply migration)
@@ -120,7 +121,9 @@ Mở trình duyệt vào **`http://localhost:5073`** → **Đăng ký** một t�
 | POST | `/api/auth/login` | | Đăng nhập → access token + refresh token |
 | POST | `/api/auth/refresh` | | Đổi refresh token lấy cặp token mới (xoay vòng) |
 | POST | `/api/auth/logout` | | Thu hồi refresh token |
-| POST | `/api/posts` | ✓ | Tạo post (kèm media) |
+| POST | `/api/media` | ✓ | Upload ảnh (multipart, ≤5MB) → lưu MinIO, trả url |
+| GET | `/api/media/{key}` | | Phục vụ ảnh (để thẻ `<img>` tải, không cần token) |
+| POST | `/api/posts` | ✓ | Tạo post (kèm media url) |
 | GET | `/api/posts/{id}` | | Xem post |
 | DELETE | `/api/posts/{id}` | ✓ | Xóa post (soft, chỉ tác giả) |
 | POST | `/api/posts/{id}/comments` | ✓ | Bình luận / reply (parentId) |
@@ -146,8 +149,11 @@ dotnet run --project src/Web
 ```
 
 Mở **`http://localhost:5073`**. Đã có: đăng ký/đăng nhập, feed (cursor pagination + like),
-tạo bài, chi tiết bài + comment. Đổi địa chỉ API trong `src/Web/wwwroot/appsettings.json`
-(`ApiBaseUrl` / `ApiBaseUrlHttps`) — không cần build lại.
+tạo bài **kèm ảnh** (upload lên MinIO), chi tiết bài + comment. Đổi địa chỉ API trong
+`src/Web/wwwroot/appsettings.json` (`ApiBaseUrl` / `ApiBaseUrlHttps`) — không cần build lại.
+
+> Upload ảnh cần **MinIO** đang chạy (`docker compose up -d minio`). Ảnh được phục vụ qua API
+> (`/api/media/{key}`) nên hiển thị cùng scheme, không dính mixed-content.
 
 ### Cấu trúc frontend (đọc theo thứ tự để hiểu)
 
@@ -201,4 +207,4 @@ Tổng **38 test**.
       màn chat ở frontend.
 - [ ] Worker flush like counter từ Redis xuống DB (hiện counter cập nhật trực tiếp trong request).
 - [ ] Endpoint + màn profile user, list follower/following.
-- [ ] Upload media thật lên MinIO (hiện chỉ nhận URL).
+- [ ] Media: thêm **video** (size limit lớn hơn, encode); resize ảnh bằng ImageSharp; CDN. (Ảnh đã xong.)

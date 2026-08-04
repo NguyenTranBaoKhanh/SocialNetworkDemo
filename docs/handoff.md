@@ -31,7 +31,10 @@ like, follow, feed. Có khung chat SignalR (chưa chạy thật). Build sạch, 
   FollowService, FeedService) + abstraction trong `Common/` (IAppDbContext, ICurrentUser,
   IPasswordHasher, IJwtTokenGenerator, AppExceptions, Dtos).
 - `Infrastructure/*` — `Persistence/AppDbContext.cs` (EF Core fluent config khớp schema),
-  `Security/` (JWT + password hasher + refresh token), migrations, `DependencyInjection.cs`.
+  `Security/` (JWT + password hasher + refresh token), `Storage/` (S3StorageService upload/đọc
+  ảnh từ MinIO), migrations, `DependencyInjection.cs`.
+- `Api/Controllers/MediaController.cs` — `POST /api/media` upload ảnh (≤5MB) lên MinIO,
+  `GET /api/media/{key}` phục vụ ảnh cho `<img>` (không cần token).
 - `Api/*` — `Program.cs` (wiring: DI, JWT, CORS, SignalR), `Controllers/*`, `Hubs/ChatHub.cs`,
   `Common/` (CurrentUser đọc JWT claim, AppExceptionHandler map lỗi → ProblemDetails).
 
@@ -42,9 +45,11 @@ like, follow, feed. Có khung chat SignalR (chưa chạy thật). Build sạch, 
 - `Auth/JwtAuthenticationStateProvider.cs` — parse claim từ JWT để Blazor biết đã đăng nhập chưa.
 - `Auth/AuthorizedHandler.cs` — DelegatingHandler: gắn Bearer vào mỗi request, gặp 401 thì tự gọi
   `/api/auth/refresh` rồi thử lại request (điểm hay nhất để giải thích cho người học).
-- `Services/AuthApi.cs` (login/register/logout/refresh), `Services/PostApi.cs` (feed/post/like/comment).
+- `Services/AuthApi.cs` (login/register/logout/refresh), `Services/PostApi.cs` (feed/post/like/comment),
+  `Services/MediaApi.cs` (upload ảnh multipart).
 - `Models/ApiModels.cs` — record C# khớp DTO của backend (client tự định nghĩa lại).
-- `Pages/` — Login, Register, Home (feed), CreatePost, PostDetail.
+- `Pages/` — Login, Register, Home (feed), CreatePost (kèm chọn/preview ảnh), PostDetail.
+- `ClientSettings.cs` — giữ ApiBaseUrl để ghép URL ảnh tuyệt đối cho `<img>`.
 - `Layout/MainLayout.razor` — navbar dùng `<AuthorizeView>` để hiện login/logout theo trạng thái.
 - `App.razor` — `<CascadingAuthenticationState>` + `<AuthorizeRouteView>` (chưa login → RedirectToLogin).
 
@@ -62,6 +67,9 @@ like, follow, feed. Có khung chat SignalR (chưa chạy thật). Build sạch, 
 6. **Feed = fan-out on read** + cursor pagination theo `(CreatedAt, Id)`. Xem `FeedService`.
 7. **snake_case**: DbContext tự đổi tên cột sang snake_case khớp quy ước PostgreSQL.
 8. **Frontend refresh tự động**: `AuthorizedHandler` bắt 401 → refresh → retry, người dùng không bị đá ra.
+9. **Media qua MinIO + proxy**: ảnh upload lên MinIO (S3), lưu object key. Ảnh phục vụ **qua API**
+   (`GET /api/media/{key}`) chứ không tải thẳng từ MinIO — để cùng scheme với API (tránh mixed-content)
+   và giữ bucket private. Lưu ý: MinIO chạy HTTP nên KHÔNG dùng `DisablePayloadSigning=true` (SDK v4 bắt HTTPS).
 
 ## Test
 - `tests/IntegrationTests/` — 38 test xUnit chạy trên **Postgres thật** (Testcontainers), KHÔNG mock
@@ -70,7 +78,8 @@ like, follow, feed. Có khung chat SignalR (chưa chạy thật). Build sạch, 
 - Chạy: `dotnet test tests/IntegrationTests` (cần Docker).
 
 ## Trạng thái hạ tầng (quan trọng — dễ vấp)
-- Docker: **postgres 5433**, **redis 6380** (KHÁC mặc định 5432/6379 vì máy đã có dịch vụ ở cổng chuẩn).
+- Docker: **postgres 5433**, **redis 6380** (KHÁC mặc định 5432/6379 vì máy đã có dịch vụ ở cổng chuẩn),
+  **minio 9000/9001** (lưu ảnh, user/pass `minioadmin`). Media cần MinIO chạy: `docker compose up -d minio`.
 - Backend chạy: http `5273`, https `7068`. Frontend Blazor: http `5073`, https `7163`.
 - **CORS**: chỉ cho phép origin `http://localhost:5073` và `https://localhost:7163`. Mở app ở origin
   khác (hoặc lệch scheme) sẽ lỗi CORS — đây là lỗi người dùng vừa gặp.
@@ -88,7 +97,8 @@ like, follow, feed. Có khung chat SignalR (chưa chạy thật). Build sạch, 
 - ChatHub chưa persist/gửi message thật (mới join/typing) — frontend cũng chưa có màn chat.
 - Chưa có worker flush counter từ Redis (counter cập nhật trực tiếp trong request).
 - Chưa có màn profile user / list follower-following (backend cũng chưa có endpoint này).
-- Chưa upload media thật lên MinIO (mới nhận URL).
+- Media mới hỗ trợ **ảnh**; chưa có **video** (cần size limit lớn hơn, có thể encode). Chưa resize
+  ảnh bằng ImageSharp, chưa CDN (đúng roadmap: để Phase sau).
 
 ## Skill gợi ý cho session sau
 - Đi sâu kiến trúc / cải thiện: `improve-codebase-architecture`.
