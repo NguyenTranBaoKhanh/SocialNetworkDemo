@@ -2,6 +2,7 @@
 @implements IDisposable
 @inject AuthApi Auth
 @inject UserApi UserApi
+@inject ChatConnection Chat
 @inject ClientSettings Settings
 @inject AuthenticationStateProvider AuthState
 @inject NavigationManager Nav
@@ -30,6 +31,13 @@
 
                 <nav class="nav-links">
                     <a href="">🏠 Feed</a>
+                    <a href="messages">
+                        💬 Tin nhắn
+                        @if (Chat.TotalUnread > 0)
+                        {
+                            <span class="badge bg-danger rounded-pill ms-1">@Chat.TotalUnread</span>
+                        }
+                    </a>
                 </nav>
 
                 @if (_suggestions.Count > 0)
@@ -60,18 +68,23 @@
     </aside>
 
     <main class="content">
-        <div class="content-inner">
-            @Body
-        </div>
+        @Body
     </main>
 </div>
+
+<ChatDock />   @* cửa sổ chat nổi khi có tin đến lúc không ở trang Messages *@
 
 @code {
     private UserProfile? _me;
     private List<UserSummary> _suggestions = new();
 
     protected override void OnInitialized()
-        => AuthState.AuthenticationStateChanged += OnAuthChanged;
+    {
+        AuthState.AuthenticationStateChanged += OnAuthChanged;
+        Chat.Changed += OnChatChanged;   // badge tổng unread cập nhật realtime
+    }
+
+    private async void OnChatChanged() => await InvokeAsync(StateHasChanged);
 
     protected override async Task OnInitializedAsync() => await LoadMeAsync();
 
@@ -88,6 +101,7 @@
         {
             _me = await UserApi.GetMeAsync();
             _suggestions = await UserApi.GetSuggestionsAsync();
+            await Chat.EnsureStartedAsync();   // mở kết nối chat toàn app -> badge + presence
         }
         else
         {
@@ -109,5 +123,9 @@
         Nav.NavigateTo("login");
     }
 
-    public void Dispose() => AuthState.AuthenticationStateChanged -= OnAuthChanged;
+    public void Dispose()
+    {
+        AuthState.AuthenticationStateChanged -= OnAuthChanged;
+        Chat.Changed -= OnChatChanged;
+    }
 }

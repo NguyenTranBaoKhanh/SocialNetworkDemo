@@ -1,0 +1,294 @@
+@page "/messages"
+@attribute [Authorize]
+@implements IDisposable
+@inject ChatConnection Chat
+@inject ChatApi ChatApi
+@inject MediaApi Media
+@inject ClientSettings Settings
+@inject AuthenticationStateProvider AuthState
+@inject IJSRuntime JS
+
+<PageTitle>Tin nhắn</PageTitle>
+
+<div class="chat-wrap">
+    <!-- Cột trái: danh sách hội thoại -->
+    <div class="conv-list">
+        <h2 class="h6 px-2 pt-2">Tin nhắn</h2>
+        @if (Chat.Conversations.Count == 0)
+        {
+            <p class="text-muted small px-2">Chưa có hội thoại nào. Vào profile ai đó và bấm "Nhắn tin".</p>
+        }
+        else
+        {
+            @foreach (var c in Chat.Conversations)
+            {
+                <div class="conv-item @(c.Id == _active?.Id ? "active" : "")" @onclick="() => OpenAsync(c)">
+                    <div class="conv-avatar">
+                        @if (!string.IsNullOrEmpty(c.OtherAvatarUrl))
+                        {
+                            <img src="@Settings.MediaUrl(c.OtherAvatarUrl)" />
+                        }
+                        else
+                        {
+                            <div class="conv-avatar-initial">@c.OtherDisplayName.Substring(0, 1).ToUpper()</div>
+                        }
+                        @if (Chat.Online.Contains(c.OtherUserId))
+                        {
+                            <span class="online-dot" title="Đang hoạt động"></span>
+                        }
+                    </div>
+                    <div class="conv-meta">
+                        <div class="conv-name">@c.OtherDisplayName</div>
+                        <div class="conv-last">
+                            @(string.IsNullOrEmpty(c.LastMessage)
+                                ? (c.LastMessageAt is not null ? "[Đính kèm]" : "")
+                                : c.LastMessage)
+                        </div>
+                    </div>
+                    @if (c.UnreadCount > 0)
+                    {
+                        <span class="badge bg-primary rounded-pill">@c.UnreadCount</span>
+                    }
+                </div>
+            }
+        }
+    </div>
+
+    <!-- Cột phải: khung chat -->
+    <div class="chat-pane">
+        @if (_active is null)
+        {
+            <div class="chat-empty text-muted">Chọn một hội thoại để bắt đầu.</div>
+        }
+        else
+        {
+            <div class="chat-header">
+                <strong>@_active.OtherDisplayName</strong>
+                <span class="text-muted small">@("@")@_active.OtherUsername</span>
+                @if (Chat.Online.Contains(_active.OtherUserId))
+                {
+                    <span class="text-success small ms-2">● Đang hoạt động</span>
+                }
+            </div>
+
+            <div class="chat-messages" @ref="_messagesEl" @onscroll="OnScrollAsync">
+                @if (_loadingOlder)
+                {
+                    <div class="text-center text-muted small py-1">Đang tải tin cũ...</div>
+                }
+                @foreach (var m in _messages)
+                {
+                    <div class="msg-row @(m.SenderId == _myId ? "mine" : "")">
+                        <div class="msg-bubble">
+                            @if (!string.IsNullOrEmpty(m.Content))
+                            {
+                                <div style="white-space: pre-wrap">@m.Content</div>
+                            }
+                            @foreach (var a in m.Attachments)
+                            {
+                                @if (a.MediaType == "video")
+                                {
+                                    <video src="@Settings.MediaUrl(a.Url)" controls
+                                           class="rounded mt-1" style="max-width:240px;max-height:240px;display:block"></video>
+                                }
+                                else
+                                {
+                                    <img src="@Settings.MediaUrl(a.Url)" class="rounded mt-1"
+                                         style="max-width:240px;max-height:240px;display:block" />
+                                }
+                            }
+                            <div class="msg-time">@m.CreatedAt.LocalDateTime.ToString("HH:mm")</div>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            @if (_pending.Count > 0 || _uploadingAttach)
+            {
+                <div class="d-flex flex-wrap gap-2 px-2 pt-1 align-items-center">
+                    @foreach (var p in _pending)
+                    {
+                        <div class="position-relative">
+                            @if (p.MediaType == "video")
+                            {
+                                <video src="@Settings.MediaUrl(p.Url)" muted
+                                       class="rounded border" style="width:70px;height:60px;object-fit:cover"></video>
+                            }
+                            else
+                            {
+                                <img src="@Settings.MediaUrl(p.Url)" class="rounded border"
+                                     style="width:60px;height:60px;object-fit:cover" />
+                            }
+                            <button type="button" class="btn btn-sm btn-danger position-absolute top-0 end-0 py-0 px-1"
+                                    @onclick="() => _pending.Remove(p)">×</button>
+                        </div>
+                    }
+                    @if (_uploadingAttach)
+                    {
+                        <span class="text-muted small">Đang tải lên...</span>
+                    }
+                </div>
+            }
+
+            <div class="chat-input">
+                <label class="btn btn-outline-secondary mb-0" title="Đính kèm ảnh/video">
+                    📎
+                    <InputFile OnChange="OnAttachSelectedAsync" accept="image/*,video/*" multiple hidden />
+                </label>
+                <input class="form-control" placeholder="Nhắn gì đó..." @bind="_draft" @bind:event="oninput"
+                       @onkeyup="OnKeyUp" />
+                <button class="btn btn-primary" @onclick="SendAsync"
+                        disabled="@(_uploadingAttach || (string.IsNullOrWhiteSpace(_draft) && _pending.Count == 0))">Gửi</button>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "c")] public string? OpenConv { get; set; }
+
+    private ConversationSummary? _active;
+    private readonly List<MessageResponse> _messages = new();
+    private long _myId;
+    private string _draft = "";
+    private readonly List<CreateMediaDto> _pending = new();   // ảnh/video đã upload, chờ gửi
+    private bool _uploadingAttach;
+
+    private ElementReference _messagesEl;
+    private string? _olderCursor;
+    private bool _loadingOlder;
+    private bool _scrollToBottom;
+    private bool _restoreScroll;
+    private double _preLoadHeight;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthState.GetAuthenticationStateAsync();
+        long.TryParse(state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out _myId);
+
+        Chat.Changed += OnChatChanged;
+        Chat.MessageArrived += OnMessageArrived;
+        await Chat.EnsureStartedAsync();
+
+        if (Guid.TryParse(OpenConv, out var cid))
+        {
+            var conv = Chat.Conversations.FirstOrDefault(x => x.Id == cid);
+            if (conv is not null) await OpenAsync(conv);
+        }
+    }
+
+    private async Task OpenAsync(ConversationSummary c)
+    {
+        _active = c;
+        Chat.ActiveConversationId = c.Id;
+        _messages.Clear();
+        _olderCursor = null;
+
+        var page = await ChatApi.GetMessagesAsync(c.Id);   // 30 tin mới nhất
+        if (page is not null)
+        {
+            _messages.AddRange(page.Items);
+            _olderCursor = page.NextCursor;
+        }
+        _scrollToBottom = true;
+
+        if (_messages.Count > 0)
+            await Chat.MarkReadAsync(c.Id, _messages[^1].Seq);
+    }
+
+    private async Task OnKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && (!string.IsNullOrWhiteSpace(_draft) || _pending.Count > 0))
+            await SendAsync();
+    }
+
+    private async Task OnAttachSelectedAsync(InputFileChangeEventArgs e)
+    {
+        _uploadingAttach = true;
+        try
+        {
+            foreach (var file in e.GetMultipleFiles(maximumFileCount: 5))
+            {
+                var dto = await Media.UploadAsync(file);
+                if (dto is not null) _pending.Add(dto);
+            }
+        }
+        catch { /* lỗi upload -> bỏ qua */ }
+        finally { _uploadingAttach = false; }
+    }
+
+    private async Task SendAsync()
+    {
+        if (_active is null) return;
+        if (string.IsNullOrWhiteSpace(_draft) && _pending.Count == 0) return;
+        var text = _draft;
+        var atts = _pending.Count > 0 ? _pending.ToList() : null;
+        _draft = "";
+        _pending.Clear();
+        await Chat.SendMessageAsync(_active.Id, text, atts);   // tin hiện qua sự kiện MessageArrived
+    }
+
+    private async void OnChatChanged() => await InvokeAsync(StateHasChanged);
+
+    private async void OnMessageArrived(MessageReceived e)
+    {
+        if (_active?.Id == e.ConversationId)
+        {
+            _messages.Add(e.Message);
+            _scrollToBottom = true;
+            if (e.Message.SenderId != _myId)
+                await Chat.MarkReadAsync(e.ConversationId, e.Message.Seq);
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // ---- Cuộn: tải 5 tin cũ khi kéo lên đầu ----
+    private async Task OnScrollAsync()
+    {
+        if (_loadingOlder || _olderCursor is null) return;
+        var top = await JS.InvokeAsync<double>("chatScroll.getTop", _messagesEl);
+        if (top <= 60) await LoadOlderAsync();
+    }
+
+    private async Task LoadOlderAsync()
+    {
+        if (_active is null || _olderCursor is null) return;
+        _loadingOlder = true;
+        _preLoadHeight = await JS.InvokeAsync<double>("chatScroll.getHeight", _messagesEl);
+
+        var page = await ChatApi.GetMessagesAsync(_active.Id, before: long.Parse(_olderCursor), limit: 5);
+        if (page is not null && page.Items.Count > 0)
+        {
+            _messages.InsertRange(0, page.Items);
+            _olderCursor = page.NextCursor;
+            _restoreScroll = true;
+        }
+        else
+        {
+            _olderCursor = null;
+        }
+        _loadingOlder = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_scrollToBottom)
+        {
+            _scrollToBottom = false;
+            await JS.InvokeVoidAsync("chatScroll.toBottom", _messagesEl);
+        }
+        else if (_restoreScroll)
+        {
+            _restoreScroll = false;
+            var newHeight = await JS.InvokeAsync<double>("chatScroll.getHeight", _messagesEl);
+            await JS.InvokeVoidAsync("chatScroll.setTop", _messagesEl, newHeight - _preLoadHeight);
+        }
+    }
+
+    public void Dispose()
+    {
+        Chat.Changed -= OnChatChanged;
+        Chat.MessageArrived -= OnMessageArrived;
+        Chat.ActiveConversationId = null;   // rời trang -> tin mới lại tính unread
+    }
+}

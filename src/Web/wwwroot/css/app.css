@@ -113,3 +113,9 @@ code {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
 }
+
+/* Bọc nội dung "đọc" (feed, profile...) cho hẹp & canh giữa. Trang chat KHÔNG dùng -> full width. */
+.narrow {
+    max-width: 680px;
+    margin: 0 auto;
+}

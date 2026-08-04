@@ -1,7 +1,7 @@
 # SocialDemo — Mạng xã hội (.NET 10)
 
 Full-stack .NET theo `CLAUDE.md`: backend REST API (monolith Clean Architecture) + frontend
-Blazor WebAssembly. Auth (JWT + refresh token), post/comment/like/follow, feed. Khung chat SignalR.
+Blazor WebAssembly. Auth (JWT + refresh token), post/comment/like/follow, feed, **chat realtime (SignalR)**.
 
 ## Cấu trúc
 
@@ -139,6 +139,11 @@ Mở trình duyệt vào **`http://localhost:5073`** → **Đăng ký** một t�
 | GET | `/api/users/{username}` | ✓ | Profile user (kèm isMe / isFollowedByMe) |
 | GET | `/api/users/{username}/posts` | ✓ | Bài của user (cursor pagination) |
 | GET | `/api/users/suggestions` | ✓ | Gợi ý follow |
+| GET | `/api/conversations` | ✓ | Danh sách hội thoại (last message + unread) |
+| POST | `/api/conversations/direct/{username}` | ✓ | Tìm/tạo hội thoại 1-1 |
+| GET | `/api/conversations/{id}/messages` | ✓ | Lịch sử tin nhắn (cursor theo seq) |
+| POST | `/api/conversations/{id}/read` | ✓ | Đánh dấu đã đọc tới seq |
+| SignalR | `/hubs/chat` | ✓ | Realtime: `SendMessage`, `MarkRead`; nhận `MessageReceived`, `PresenceChanged`, `OnlineUsers` |
 
 > Gửi access token qua header `Authorization: Bearer <token>`.
 
@@ -157,7 +162,8 @@ dotnet run --project src/Web
 
 Mở **`http://localhost:5073`**. Đã có: đăng ký/đăng nhập, sidebar (avatar + gợi ý follow),
 feed (like), tạo bài **kèm ảnh/video** (popup), bình luận **trả lời đa cấp** (popup), trang
-**profile** (`/u/{username}`) với đổi avatar / follow / **chỉnh sửa hồ sơ** (tên, bio) / **đổi mật khẩu**.
+**profile** (`/u/{username}`) với đổi avatar / follow / **chỉnh sửa hồ sơ** (tên, bio) / **đổi mật khẩu**,
+**nhắn tin realtime** (`/messages`: danh sách hội thoại + chat 1-1 + trạng thái online).
 Đổi địa chỉ API trong
 `src/Web/wwwroot/appsettings.json` (`ApiBaseUrl` / `ApiBaseUrlHttps`) — không cần build lại.
 
@@ -174,7 +180,8 @@ feed (like), tạo bài **kèm ảnh/video** (popup), bình luận **trả lời
 | `Auth/JwtAuthenticationStateProvider.cs` | Đọc claim từ JWT → Blazor biết đã đăng nhập chưa (điều khiển `<AuthorizeView>`). |
 | `Auth/AuthorizedHandler.cs` | **Điểm cốt lõi**: gắn `Bearer` vào mỗi request; gặp **401** thì tự gọi `/api/auth/refresh`, lấy token mới rồi **thử lại request** — người dùng không bị đá ra. |
 | `Services/AuthApi.cs`, `Services/PostApi.cs`, `Services/MediaApi.cs` | Gọi API auth / post-feed-like-comment / upload media. |
-| `Pages/*.razor` | Login, Register, Home (feed), PostDetail, **Profile** (`/u/{username}`). |
+| `Pages/*.razor` | Login, Register, Home (feed), PostDetail, **Profile** (`/u/{username}`), **Messages** (`/messages`: chat realtime qua SignalR). |
+| `Services/ChatApi.cs` | REST cho chat (danh sách hội thoại, lịch sử, bắt đầu chat); gửi tin realtime qua `HubConnection` trong trang Messages. |
 | `Layout/MainLayout.razor` | **Sidebar trái**: avatar + tên user (link profile), gợi ý follow, đăng xuất. |
 | `Components/PostCard.razor` | Thẻ 1 bài (dùng chung feed & profile): tên tác giả link profile, media, like, mở popup bình luận — **tự quản lý trạng thái**. |
 | `Components/CreatePostDialog.razor` | **Popup** tạo bài (nội dung + ảnh/video), mở từ feed — không chuyển trang; đăng xong thêm bài lên đầu feed. |
@@ -219,8 +226,8 @@ Tổng **38 test**.
 
 ## Bước tiếp theo (chưa làm)
 
-- [ ] Nối `ChatHub.SendMessage` vào service persist (cấp seq trong transaction) rồi mới broadcast +
-      màn chat ở frontend.
+- [ ] Chat nâng cao: typing indicator, trạng thái sent/delivered/read, chat nhóm, kết nối SignalR
+      toàn app (hiện presence chỉ hoạt động khi đang ở trang Messages), presence qua Redis (multi-instance).
 - [ ] Worker flush like counter từ Redis xuống DB (hiện counter cập nhật trực tiếp trong request).
 - [ ] Trang danh sách follower/following (số đếm đã có, chưa có màn liệt kê).
 - [ ] Media: encode video bằng FFmpeg qua queue (hiện lưu thẳng); resize ảnh (ImageSharp); CDN;

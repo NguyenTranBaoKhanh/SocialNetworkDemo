@@ -121,11 +121,6 @@
     padding: 1.5rem;
 }
 
-.content-inner {
-    max-width: 680px;
-    margin: 0 auto;
-}
-
 /* Màn hình nhỏ: sidebar xếp lên trên. */
 @media (max-width: 768px) {
     .app {

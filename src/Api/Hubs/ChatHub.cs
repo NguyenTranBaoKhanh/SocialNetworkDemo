@@ -1,50 +1,72 @@
 using System.Security.Claims;
+using Application.Chat;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 
 namespace Api.Hubs;
 
 /// <summary>
-/// Hub chat realtime. Nguyên tắc (CLAUDE.md):
-///  - Group theo conversationId để fan-out tin nhắn.
-///  - Persist message vào DB TRƯỚC khi ack + broadcast (làm trong service, chưa nối ở đây).
-///  - Ordering bằng seq per conversation — server cấp, không tin client.
-///  - Nhiều instance => BẮT BUỘC Redis backplane (bật ở Program.cs).
-///
-/// Đây là khung: các method thao tác DB (gửi tin, đánh dấu đã đọc) sẽ gọi sang
-/// Application service ở bước sau. Hiện tại lo phần join/leave group + typing.
+/// Hub chat realtime. Fan-out theo group "user:{id}" (mỗi connection của user vào group của user đó),
+/// nên tin nhắn tới mọi thành viên hội thoại dù họ có đang mở hội thoại đó hay không.
+/// Persist qua ChatService TRƯỚC khi broadcast (đúng nguyên tắc CLAUDE.md).
+/// Nhiều instance => cần Redis backplane (đã bật sẵn ở Program.cs khi có Redis).
 /// </summary>
 [Authorize]
 public class ChatHub : Hub
 {
-    private static string GroupName(long conversationId) => $"conversation:{conversationId}";
+    private readonly ChatService _chat;
+    private readonly PresenceTracker _presence;
 
-    private long CurrentUserId =>
+    public ChatHub(ChatService chat, PresenceTracker presence)
+    {
+        _chat = chat;
+        _presence = presence;
+    }
+
+    private long UserId =>
         long.Parse(Context.User?.FindFirstValue(ClaimTypes.NameIdentifier) ?? "0");
 
-    /// <summary>Tham gia nhóm SignalR của một hội thoại để nhận tin realtime.</summary>
-    public async Task JoinConversation(long conversationId)
+    private static string UserGroup(long userId) => $"user:{userId}";
+
+    public override async Task OnConnectedAsync()
     {
-        // TODO: kiểm tra CurrentUserId có phải thành viên hội thoại không (authz).
-        await Groups.AddToGroupAsync(Context.ConnectionId, GroupName(conversationId));
+        var uid = UserId;
+        await Groups.AddToGroupAsync(Context.ConnectionId, UserGroup(uid));
+
+        // Gửi danh sách đang online cho người vừa kết nối.
+        await Clients.Caller.SendAsync("OnlineUsers", _presence.OnlineUsers());
+
+        // Nếu vừa chuyển sang online -> báo mọi người.
+        if (_presence.Connect(uid))
+            await Clients.Others.SendAsync("PresenceChanged", new { userId = uid, online = true });
+
+        await base.OnConnectedAsync();
     }
 
-    public async Task LeaveConversation(long conversationId)
+    public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        await Groups.RemoveFromGroupAsync(Context.ConnectionId, GroupName(conversationId));
+        var uid = UserId;
+        if (_presence.Disconnect(uid))
+            await Clients.Others.SendAsync("PresenceChanged", new { userId = uid, online = false });
+
+        await base.OnDisconnectedAsync(exception);
     }
 
-    /// <summary>Typing indicator — chỉ broadcast, KHÔNG persist DB (đúng nguyên tắc).</summary>
-    public async Task Typing(long conversationId)
+    /// <summary>Gửi tin (kèm ảnh/video): persist rồi fan-out tới mọi thành viên (kể cả người gửi).</summary>
+    public async Task<MessageResponse> SendMessage(
+        Guid conversationId, string content, List<AttachmentInput>? attachments, Guid? clientMsgId)
     {
-        await Clients.OthersInGroup(GroupName(conversationId))
-            .SendAsync("UserTyping", new { conversationId, userId = CurrentUserId });
+        var result = await _chat.SendMessageAsync(UserId, conversationId, content, attachments, clientMsgId);
+
+        foreach (var memberId in result.MemberIds)
+        {
+            await Clients.Group(UserGroup(memberId)).SendAsync("MessageReceived",
+                new { conversationId = result.ConversationId, message = result.Message });
+        }
+
+        return result.Message;
     }
 
-    // TODO (bước sau, gọi Application service):
-    //   Task<MessageDto> SendMessage(long conversationId, string content, Guid clientMsgId)
-    //     -> service persist (cấp seq trong transaction) -> commit
-    //     -> Clients.Group(...).SendAsync("MessageReceived", dto)
-    //   Task MarkRead(long conversationId, long seq)
-    //     -> cập nhật last_read_seq -> báo "ReadReceipt" cho nhóm.
+    /// <summary>Đánh dấu đã đọc tới seq.</summary>
+    public Task MarkRead(Guid conversationId, long seq) => _chat.MarkReadAsync(UserId, conversationId, seq);
 }

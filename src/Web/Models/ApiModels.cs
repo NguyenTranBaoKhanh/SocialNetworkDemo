@@ -45,3 +45,20 @@ public record LikeResult(int LikeCount, bool LikedByMe);
 public record FollowResult(bool Following);
 
 public record CursorPage<T>(List<T> Items, string? NextCursor);
+
+// ---- Chat ----
+public record ConversationSummary(
+    Guid Id, long OtherUserId, string OtherUsername, string OtherDisplayName, string? OtherAvatarUrl,
+    string? LastMessage, DateTimeOffset? LastMessageAt, int UnreadCount);
+
+public record MessageAttachmentDto(string Url, string MediaType);
+
+public record MessageResponse(
+    long Id, long Seq, long SenderId, string SenderUsername, string SenderDisplayName,
+    string Content, List<MessageAttachmentDto> Attachments, DateTimeOffset CreatedAt);
+
+/// <summary>Payload sự kiện SignalR "MessageReceived".</summary>
+public record MessageReceived(Guid ConversationId, MessageResponse Message);
+
+/// <summary>Payload sự kiện SignalR "PresenceChanged".</summary>
+public record PresenceChange(long UserId, bool Online);

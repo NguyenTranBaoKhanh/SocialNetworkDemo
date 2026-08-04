@@ -35,6 +35,7 @@ builder.Services.AddCors(o => o.AddPolicy(FrontendCors, p => p
     .AllowCredentials()));   // AllowCredentials cần cho SignalR (WebSocket) sau này
 
 // ---- SignalR (+ Redis backplane khi chạy nhiều instance) ----
+builder.Services.AddSingleton<PresenceTracker>();   // theo dõi user online (in-memory)
 var signalr = builder.Services.AddSignalR();
 var redisConn = builder.Configuration.GetConnectionString("Redis");
 if (!string.IsNullOrWhiteSpace(redisConn))

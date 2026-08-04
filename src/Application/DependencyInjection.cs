@@ -1,4 +1,5 @@
 using Application.Auth;
+using Application.Chat;
 using Application.Comments;
 using Application.Feed;
 using Application.Follows;
@@ -20,6 +21,7 @@ public static class DependencyInjection
         services.AddScoped<FollowService>();
         services.AddScoped<FeedService>();
         services.AddScoped<UserService>();
+        services.AddScoped<ChatService>();
         return services;
     }
 }

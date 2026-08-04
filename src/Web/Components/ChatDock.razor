@@ -1,0 +1,262 @@
+@implements IDisposable
+@inject ChatConnection Chat
+@inject ChatApi ChatApi
+@inject MediaApi Media
+@inject ClientSettings Settings
+@inject AuthenticationStateProvider AuthState
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+@* Cửa sổ chat nổi góc dưới-trái: tự bật khi có tin đến (khi KHÔNG ở trang /messages). *@
+<div class="chat-dock">
+    @foreach (var d in _docks)
+    {
+        <div class="dock-window">
+            <div class="dock-header" @onclick="() => Toggle(d)">
+                <span class="dock-name">@d.Conv.OtherDisplayName</span>
+                @if (Chat.Online.Contains(d.Conv.OtherUserId))
+                {
+                    <span class="dock-online" title="Đang hoạt động"></span>
+                }
+                <span class="flex-grow-1"></span>
+                <button class="dock-x" @onclick:stopPropagation="true" @onclick="() => Close(d)">×</button>
+            </div>
+
+            @if (!d.Minimized)
+            {
+                <div class="dock-messages" @ref="d.MessagesEl" @onscroll="() => OnDockScrollAsync(d)">
+                    @if (d.LoadingOlder)
+                    {
+                        <div class="text-center text-muted small py-1">Đang tải...</div>
+                    }
+                    @foreach (var m in d.Messages)
+                    {
+                        <div class="dmsg @(m.SenderId == _myId ? "mine" : "")">
+                            <div class="dbubble">
+                                @if (!string.IsNullOrEmpty(m.Content))
+                                {
+                                    <div style="white-space: pre-wrap">@m.Content</div>
+                                }
+                                @foreach (var a in m.Attachments)
+                                {
+                                    @if (a.MediaType == "video")
+                                    {
+                                        <video src="@Settings.MediaUrl(a.Url)" controls
+                                               class="rounded mt-1" style="max-width:180px;max-height:180px;display:block"></video>
+                                    }
+                                    else
+                                    {
+                                        <img src="@Settings.MediaUrl(a.Url)" class="rounded mt-1"
+                                             style="max-width:180px;max-height:180px;display:block" />
+                                    }
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                @if (d.Pending.Count > 0 || d.Uploading)
+                {
+                    <div class="d-flex flex-wrap gap-1 px-2 pt-1">
+                        @foreach (var p in d.Pending)
+                        {
+                            <div class="position-relative">
+                                @if (p.MediaType == "video")
+                                {
+                                    <video src="@Settings.MediaUrl(p.Url)" muted
+                                           class="rounded border" style="width:44px;height:40px;object-fit:cover"></video>
+                                }
+                                else
+                                {
+                                    <img src="@Settings.MediaUrl(p.Url)" class="rounded border"
+                                         style="width:40px;height:40px;object-fit:cover" />
+                                }
+                                <button type="button" class="btn btn-sm btn-danger position-absolute top-0 end-0 py-0 px-1"
+                                        style="line-height:1" @onclick="() => p_Remove(d, p)">×</button>
+                            </div>
+                        }
+                        @if (d.Uploading)
+                        {
+                            <span class="text-muted small">Đang tải...</span>
+                        }
+                    </div>
+                }
+
+                <div class="dock-input">
+                    <label class="btn btn-outline-secondary btn-sm mb-0" title="Đính kèm ảnh/video">
+                        📎
+                        <InputFile OnChange="e => OnAttachAsync(e, d)" accept="image/*,video/*" multiple hidden />
+                    </label>
+                    <input class="form-control form-control-sm" placeholder="Nhắn..."
+                           @bind="d.Draft" @bind:event="oninput" @onkeyup="e => OnKeyUp(e, d)" />
+                    <button class="btn btn-primary btn-sm" @onclick="() => SendAsync(d)"
+                            disabled="@(d.Uploading || (string.IsNullOrWhiteSpace(d.Draft) && d.Pending.Count == 0))">Gửi</button>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private class Dock
+    {
+        public ConversationSummary Conv = default!;
+        public List<MessageResponse> Messages = new();
+        public string Draft = "";
+        public bool Minimized;
+        public ElementReference MessagesEl;
+        public string? OlderCursor;
+        public bool LoadingOlder;
+        public bool ScrollBottom;
+        public bool RestoreScroll;
+        public double PreHeight;
+        public List<CreateMediaDto> Pending = new();
+        public bool Uploading;
+    }
+
+    private readonly List<Dock> _docks = new();
+    private long _myId;
+    private bool _onMessages;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthState.GetAuthenticationStateAsync();
+        long.TryParse(state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out _myId);
+
+        _onMessages = IsOnMessages();
+        Chat.MessageArrived += OnMessageArrived;
+        Chat.Changed += OnChatChanged;
+        Nav.LocationChanged += OnLocationChanged;
+    }
+
+    private bool IsOnMessages()
+        => Nav.ToBaseRelativePath(Nav.Uri).StartsWith("messages", StringComparison.OrdinalIgnoreCase);
+
+    private void OnLocationChanged(object? _, LocationChangedEventArgs e)
+    {
+        _onMessages = IsOnMessages();
+        if (_onMessages) _docks.Clear();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async void OnChatChanged() => await InvokeAsync(StateHasChanged);
+
+    private async void OnMessageArrived(MessageReceived e)
+    {
+        if (_onMessages) return;
+
+        var d = _docks.FirstOrDefault(x => x.Conv.Id == e.ConversationId);
+        if (d is not null)
+        {
+            d.Messages.Add(e.Message);
+            d.Minimized = false;
+            d.ScrollBottom = true;
+            if (e.Message.SenderId != _myId)
+                await Chat.MarkReadAsync(e.ConversationId, e.Message.Seq);
+        }
+        else if (e.Message.SenderId != _myId)
+        {
+            var conv = Chat.Conversations.FirstOrDefault(c => c.Id == e.ConversationId);
+            if (conv is not null)
+            {
+                d = new Dock { Conv = conv };
+                var page = await ChatApi.GetMessagesAsync(conv.Id, limit: 20);
+                if (page is not null) { d.Messages.AddRange(page.Items); d.OlderCursor = page.NextCursor; }
+                d.ScrollBottom = true;
+                _docks.Add(d);
+                await Chat.MarkReadAsync(conv.Id, e.Message.Seq);
+            }
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // ---- Cuộn tải tin cũ (per-dock) ----
+    private async Task OnDockScrollAsync(Dock d)
+    {
+        if (d.LoadingOlder || d.OlderCursor is null) return;
+        var top = await JS.InvokeAsync<double>("chatScroll.getTop", d.MessagesEl);
+        if (top <= 40) await LoadOlderAsync(d);
+    }
+
+    private async Task LoadOlderAsync(Dock d)
+    {
+        d.LoadingOlder = true;
+        d.PreHeight = await JS.InvokeAsync<double>("chatScroll.getHeight", d.MessagesEl);
+
+        var page = await ChatApi.GetMessagesAsync(d.Conv.Id, before: long.Parse(d.OlderCursor!), limit: 5);
+        if (page is not null && page.Items.Count > 0)
+        {
+            d.Messages.InsertRange(0, page.Items);
+            d.OlderCursor = page.NextCursor;
+            d.RestoreScroll = true;
+        }
+        else
+        {
+            d.OlderCursor = null;
+        }
+        d.LoadingOlder = false;
+    }
+
+    // ---- Đính kèm ----
+    private async Task OnAttachAsync(InputFileChangeEventArgs e, Dock d)
+    {
+        d.Uploading = true;
+        try
+        {
+            foreach (var file in e.GetMultipleFiles(maximumFileCount: 4))
+            {
+                var dto = await Media.UploadAsync(file);
+                if (dto is not null) d.Pending.Add(dto);
+            }
+        }
+        catch { /* bỏ qua lỗi upload */ }
+        finally { d.Uploading = false; }
+    }
+
+    private void p_Remove(Dock d, CreateMediaDto p) => d.Pending.Remove(p);
+
+    private async Task OnKeyUp(KeyboardEventArgs e, Dock d)
+    {
+        if (e.Key == "Enter" && (!string.IsNullOrWhiteSpace(d.Draft) || d.Pending.Count > 0))
+            await SendAsync(d);
+    }
+
+    private async Task SendAsync(Dock d)
+    {
+        if (string.IsNullOrWhiteSpace(d.Draft) && d.Pending.Count == 0) return;
+        var text = d.Draft;
+        var atts = d.Pending.Count > 0 ? d.Pending.ToList() : null;
+        d.Draft = "";
+        d.Pending.Clear();
+        await Chat.SendMessageAsync(d.Conv.Id, text, atts);
+    }
+
+    private void Toggle(Dock d) => d.Minimized = !d.Minimized;
+    private void Close(Dock d) => _docks.Remove(d);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        foreach (var d in _docks.ToList())
+        {
+            if (d.Minimized) continue;
+            if (d.ScrollBottom)
+            {
+                d.ScrollBottom = false;
+                await JS.InvokeVoidAsync("chatScroll.toBottom", d.MessagesEl);
+            }
+            else if (d.RestoreScroll)
+            {
+                d.RestoreScroll = false;
+                var h = await JS.InvokeAsync<double>("chatScroll.getHeight", d.MessagesEl);
+                await JS.InvokeVoidAsync("chatScroll.setTop", d.MessagesEl, h - d.PreHeight);
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        Chat.MessageArrived -= OnMessageArrived;
+        Chat.Changed -= OnChatChanged;
+        Nav.LocationChanged -= OnLocationChanged;
+    }
+}

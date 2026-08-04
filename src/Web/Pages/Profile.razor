@@ -3,10 +3,13 @@
 @inject UserApi UserApi
 @inject PostApi PostApi
 @inject MediaApi Media
+@inject ChatApi Chat
 @inject ClientSettings Settings
+@inject NavigationManager Nav
 
 <PageTitle>@(_profile?.DisplayName ?? Username)</PageTitle>
 
+<div class="narrow">
 @if (_notFound)
 {
     <div class="alert alert-warning">Không tìm thấy user.</div>
@@ -55,13 +58,17 @@ else
                         <InputFile OnChange="OnAvatarSelectedAsync" accept="image/*" hidden />
                     </label>
                 }
-                else if (_profile.IsFollowedByMe)
-                {
-                    <button class="btn btn-outline-primary btn-sm" @onclick="UnfollowAsync">Đang follow</button>
-                }
                 else
                 {
-                    <button class="btn btn-primary btn-sm" @onclick="FollowAsync">Follow</button>
+                    @if (_profile.IsFollowedByMe)
+                    {
+                        <button class="btn btn-outline-primary btn-sm" @onclick="UnfollowAsync">Đang follow</button>
+                    }
+                    else
+                    {
+                        <button class="btn btn-primary btn-sm" @onclick="FollowAsync">Follow</button>
+                    }
+                    <button class="btn btn-outline-secondary btn-sm" @onclick="MessageAsync">Nhắn tin</button>
                 }
             </div>
         </div>
@@ -86,6 +93,8 @@ else
         }
     }
 }
+
+</div>
 
 @if (_showEdit && _profile is not null)
 {
@@ -148,6 +157,12 @@ else
         await UserApi.UnfollowAsync(Username);
         if (_profile is not null)
             _profile = _profile with { IsFollowedByMe = false, FollowerCount = Math.Max(0, _profile.FollowerCount - 1) };
+    }
+
+    private async Task MessageAsync()
+    {
+        var conv = await Chat.StartDirectAsync(Username);
+        if (conv is not null) Nav.NavigateTo($"messages?c={conv.Id}");
     }
 
     private void OnProfileSaved(UpdateProfileRequest req)

@@ -43,5 +43,7 @@ builder.Services.AddScoped<AuthApi>();
 builder.Services.AddScoped<PostApi>();
 builder.Services.AddScoped<MediaApi>();
 builder.Services.AddScoped<UserApi>();
+builder.Services.AddScoped<ChatApi>();
+builder.Services.AddScoped<ChatConnection>();
 
 await builder.Build().RunAsync();
