@@ -33,8 +33,8 @@ like, follow, feed. Có khung chat SignalR (chưa chạy thật). Build sạch, 
 - `Infrastructure/*` — `Persistence/AppDbContext.cs` (EF Core fluent config khớp schema),
   `Security/` (JWT + password hasher + refresh token), `Storage/` (S3StorageService upload/đọc
   ảnh từ MinIO), migrations, `DependencyInjection.cs`.
-- `Api/Controllers/MediaController.cs` — `POST /api/media` upload ảnh (≤5MB) lên MinIO,
-  `GET /api/media/{key}` phục vụ ảnh cho `<img>` (không cần token).
+- `Api/Controllers/MediaController.cs` — `POST /api/media` upload ảnh (≤5MB) hoặc video (≤50MB)
+  lên MinIO, `GET /api/media/{key}` phục vụ media cho `<img>`/`<video>` (không cần token).
 - `Api/*` — `Program.cs` (wiring: DI, JWT, CORS, SignalR), `Controllers/*`, `Hubs/ChatHub.cs`,
   `Common/` (CurrentUser đọc JWT claim, AppExceptionHandler map lỗi → ProblemDetails).
 
@@ -46,9 +46,9 @@ like, follow, feed. Có khung chat SignalR (chưa chạy thật). Build sạch, 
 - `Auth/AuthorizedHandler.cs` — DelegatingHandler: gắn Bearer vào mỗi request, gặp 401 thì tự gọi
   `/api/auth/refresh` rồi thử lại request (điểm hay nhất để giải thích cho người học).
 - `Services/AuthApi.cs` (login/register/logout/refresh), `Services/PostApi.cs` (feed/post/like/comment),
-  `Services/MediaApi.cs` (upload ảnh multipart).
+  `Services/MediaApi.cs` (upload ảnh/video multipart).
 - `Models/ApiModels.cs` — record C# khớp DTO của backend (client tự định nghĩa lại).
-- `Pages/` — Login, Register, Home (feed), CreatePost (kèm chọn/preview ảnh), PostDetail.
+- `Pages/` — Login, Register, Home (feed), CreatePost (kèm chọn/preview ảnh/video), PostDetail.
 - `ClientSettings.cs` — giữ ApiBaseUrl để ghép URL ảnh tuyệt đối cho `<img>`.
 - `Layout/MainLayout.razor` — navbar dùng `<AuthorizeView>` để hiện login/logout theo trạng thái.
 - `App.razor` — `<CascadingAuthenticationState>` + `<AuthorizeRouteView>` (chưa login → RedirectToLogin).
@@ -67,9 +67,11 @@ like, follow, feed. Có khung chat SignalR (chưa chạy thật). Build sạch, 
 6. **Feed = fan-out on read** + cursor pagination theo `(CreatedAt, Id)`. Xem `FeedService`.
 7. **snake_case**: DbContext tự đổi tên cột sang snake_case khớp quy ước PostgreSQL.
 8. **Frontend refresh tự động**: `AuthorizedHandler` bắt 401 → refresh → retry, người dùng không bị đá ra.
-9. **Media qua MinIO + proxy**: ảnh upload lên MinIO (S3), lưu object key. Ảnh phục vụ **qua API**
+9. **Media qua MinIO + proxy**: ảnh/video upload lên MinIO (S3), lưu object key. Phục vụ **qua API**
    (`GET /api/media/{key}`) chứ không tải thẳng từ MinIO — để cùng scheme với API (tránh mixed-content)
-   và giữ bucket private. Lưu ý: MinIO chạy HTTP nên KHÔNG dùng `DisablePayloadSigning=true` (SDK v4 bắt HTTPS).
+   và giữ bucket private. `MediaController` validate loại (ảnh ≤5MB, video ≤50MB) và trả `mediaType`;
+   frontend render `<img>` hay `<video>` theo `mediaType`. Lưu ý: MinIO chạy HTTP nên KHÔNG dùng
+   `DisablePayloadSigning=true` (SDK v4 bắt HTTPS).
 
 ## Test
 - `tests/IntegrationTests/` — 38 test xUnit chạy trên **Postgres thật** (Testcontainers), KHÔNG mock
@@ -97,8 +99,8 @@ like, follow, feed. Có khung chat SignalR (chưa chạy thật). Build sạch, 
 - ChatHub chưa persist/gửi message thật (mới join/typing) — frontend cũng chưa có màn chat.
 - Chưa có worker flush counter từ Redis (counter cập nhật trực tiếp trong request).
 - Chưa có màn profile user / list follower-following (backend cũng chưa có endpoint này).
-- Media mới hỗ trợ **ảnh**; chưa có **video** (cần size limit lớn hơn, có thể encode). Chưa resize
-  ảnh bằng ImageSharp, chưa CDN (đúng roadmap: để Phase sau).
+- Media hỗ trợ **ảnh + video** (lưu thẳng). Chưa encode video (FFmpeg qua queue), chưa resize ảnh
+  (ImageSharp), chưa CDN, chưa range request cho video (seek) — đúng roadmap, để Phase sau.
 
 ## Skill gợi ý cho session sau
 - Đi sâu kiến trúc / cải thiện: `improve-codebase-architecture`.

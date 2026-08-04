@@ -17,12 +17,12 @@
 
             <div class="mb-2">
                 <label class="btn btn-outline-secondary btn-sm mb-0">
-                    📷 Thêm ảnh
-                    <InputFile OnChange="OnFilesSelectedAsync" accept="image/*" multiple hidden />
+                    📷 Thêm ảnh/video
+                    <InputFile OnChange="OnFilesSelectedAsync" accept="image/*,video/*" multiple hidden />
                 </label>
                 @if (_uploading)
                 {
-                    <span class="ms-2 text-muted small">Đang tải ảnh...</span>
+                    <span class="ms-2 text-muted small">Đang tải lên...</span>
                 }
             </div>
 
@@ -32,8 +32,16 @@
                     @foreach (var m in _media)
                     {
                         <div class="position-relative">
-                            <img src="@Settings.MediaUrl(m.Url)" style="width:100px;height:100px;object-fit:cover"
-                                 class="rounded border" />
+                            @if (m.MediaType == "video")
+                            {
+                                <video src="@Settings.MediaUrl(m.Url)" style="width:140px;height:100px;object-fit:cover"
+                                       class="rounded border" muted></video>
+                            }
+                            else
+                            {
+                                <img src="@Settings.MediaUrl(m.Url)" style="width:100px;height:100px;object-fit:cover"
+                                     class="rounded border" />
+                            }
                             <button type="button" class="btn btn-sm btn-danger position-absolute top-0 end-0 py-0 px-1"
                                     @onclick="() => _media.Remove(m)">×</button>
                         </div>
@@ -72,13 +80,13 @@
         {
             foreach (var file in e.GetMultipleFiles(maximumFileCount: 4))
             {
-                var dto = await Media.UploadImageAsync(file);
+                var dto = await Media.UploadAsync(file);
                 if (dto is not null) _media.Add(dto);
             }
         }
         catch (Exception ex)
         {
-            _error = "Tải ảnh lỗi (ảnh ≤ 5MB, đúng định dạng). " + ex.Message;
+            _error = "Tải lên lỗi: " + ex.Message;   // ex.Message giờ là lý do thật từ server
         }
         finally
         {
