@@ -1,0 +1,90 @@
+@page "/post/{Id:guid}"
+@attribute [Authorize]
+@inject PostApi Api
+
+<PageTitle>Bài viết</PageTitle>
+
+<a class="btn btn-sm btn-link px-0 mb-2" href="">← Về feed</a>
+
+@if (_post is null)
+{
+    <p>@(_notFound ? "Không tìm thấy bài viết." : "Đang tải...")</p>
+}
+else
+{
+    <div class="card mb-4">
+        <div class="card-body">
+            <strong>@_post.Author.DisplayName <span class="text-muted fw-normal">@("@")@_post.Author.Username</span></strong>
+            <small class="text-muted d-block">@_post.CreatedAt.LocalDateTime.ToString("dd/MM/yyyy HH:mm")</small>
+            <p class="my-2" style="white-space: pre-wrap">@_post.Content</p>
+            <span class="text-danger">♥ @_post.LikeCount</span>
+        </div>
+    </div>
+
+    <h2 class="h5 mb-3">Bình luận (@_comments.Count)</h2>
+
+    <div class="input-group mb-3">
+        <input class="form-control" placeholder="Viết bình luận..." @bind="_newComment" @bind:event="oninput"
+               @onkeyup="OnKeyUp" />
+        <button class="btn btn-primary" @onclick="AddCommentAsync"
+                disabled="@(_busy || string.IsNullOrWhiteSpace(_newComment))">Gửi</button>
+    </div>
+
+    @if (_comments.Count == 0)
+    {
+        <p class="text-muted">Chưa có bình luận nào.</p>
+    }
+    else
+    {
+        @foreach (var c in _comments)
+        {
+            <div class="border-bottom py-2 @(c.ParentId is not null ? "ms-4" : "")">
+                <strong>@c.Author.DisplayName</strong>
+                <small class="text-muted">@c.CreatedAt.LocalDateTime.ToString("dd/MM HH:mm")</small>
+                <div style="white-space: pre-wrap">@c.Content</div>
+            </div>
+        }
+    }
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private PostResponse? _post;
+    private readonly List<CommentResponse> _comments = new();
+    private string _newComment = "";
+    private bool _busy;
+    private bool _notFound;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _post = await Api.GetPostAsync(Id);
+            var page = await Api.GetCommentsAsync(Id);
+            if (page is not null) _comments.AddRange(page.Items);
+        }
+        catch
+        {
+            _notFound = true;
+        }
+    }
+
+    private async Task OnKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_newComment))
+            await AddCommentAsync();
+    }
+
+    private async Task AddCommentAsync()
+    {
+        _busy = true;
+        var created = await Api.AddCommentAsync(Id, _newComment);
+        if (created is not null)
+        {
+            _comments.Add(created);
+            _newComment = "";
+        }
+        _busy = false;
+    }
+}

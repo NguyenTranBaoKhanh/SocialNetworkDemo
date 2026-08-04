@@ -1,42 +1,107 @@
 # SocialDemo — Mạng xã hội (.NET 10)
 
-Skeleton monolith theo `CLAUDE.md`. Phase 1 (post/comment/like/follow) + chat realtime (SignalR).
+Full-stack .NET theo `CLAUDE.md`: backend REST API (monolith Clean Architecture) + frontend
+Blazor WebAssembly. Auth (JWT + refresh token), post/comment/like/follow, feed. Khung chat SignalR.
 
 ## Cấu trúc
 
 ```
 src/
-  Api/              # ASP.NET Core host, SignalR ChatHub, JWT auth, Program.cs
-  Application/      # use case, DTO, validation (đang trống — bước tiếp theo)
-  Domain/           # entity (User, Post, Comment, Like, Follow, Conversation, Message...)
-  Infrastructure/   # EF Core AppDbContext, Npgsql, Redis, migrations
+  Api/              # ASP.NET Core host, SignalR ChatHub, JWT auth, CORS, Program.cs
+  Application/      # use case service, DTO, validation
+  Domain/           # entity (User, Post, Comment, Like, Follow, RefreshToken, Message...)
+  Infrastructure/   # EF Core AppDbContext, Npgsql, Redis, migrations, security
+  Web/              # Frontend Blazor WebAssembly (Auth + Feed + Post)
 db/schema.sql       # schema SQL tham chiếu (nguồn thiết kế)
 docker-compose.yml  # postgres (5433) + redis (6380) + minio (9000/9001)
 ```
 
+> Backend là REST API thuần (JSON + JWT + SignalR) — frontend-agnostic. Blazor hiện tại chỉ là
+> một client; sau này thêm React/mobile chỉ cần thêm origin vào `Cors:AllowedOrigins`.
+
 > Port đã đổi sang **5433** (postgres) và **6380** (redis) để tránh đụng dịch vụ chạy sẵn trên máy.
 
-## Chạy
+## Cài đặt & chạy từ đầu (fresh machine)
 
-1. Hạ tầng:
+Làm tuần tự các bước dưới đây là chạy được app.
+
+### 0. Yêu cầu (cài một lần)
+
+| Công cụ | Kiểm tra / Cài |
+|---|---|
+| **.NET 10 SDK** | `dotnet --version` (phải ≥ 10.0). Tải: https://dotnet.microsoft.com/download |
+| **Docker Desktop** | `docker --version`. Phải **đang chạy** (mở app Docker Desktop). |
+| **dotnet-ef** (tạo schema) | `dotnet tool install --global dotnet-ef` (nếu `dotnet ef` báo not found) |
+
+> Không cần cài NuGet source gì thêm: repo có `nuget.config` chỉ dùng nuget.org.
+
+### 1. Lấy code
+
+```bash
+git clone https://github.com/NguyenTranBaoKhanh/SocialNetworkDemo.git
+```
+
+### 2. Bật hạ tầng (PostgreSQL + Redis)
+
+Chạy tại thư mục gốc dự án:
 
 ```bash
 docker compose up -d postgres redis
 ```
 
-2. Tạo schema (apply migration):
+> Postgres map ra cổng **5433**, Redis **6380** (khác mặc định để tránh đụng dịch vụ sẵn có).
+> Connection string đã trỏ đúng, không cần chỉnh.
+
+### 3. Tạo schema database (apply migration)
 
 ```bash
 dotnet ef database update --project src/Infrastructure --startup-project src/Api
 ```
 
-3. Chạy API:
+Lệnh này tạo toàn bộ bảng (users, posts, refresh_tokens...) trong DB `socialdemo`. Chỉ cần chạy
+lại khi có migration mới.
+
+### 4. Chạy Backend API — terminal 1
 
 ```bash
 dotnet run --project src/Api
 ```
 
-Kiểm tra: `GET /health` → `{"status":"ok"}`. SignalR hub tại `/hubs/chat`.
+Kiểm tra: mở `http://localhost:5273/health` thấy `{"status":"ok"}`.
+
+### 5. Chạy Frontend Blazor — terminal 2 (mở SONG SONG, không tắt terminal 1)
+
+```bash
+dotnet run --project src/Web
+```
+
+### 6. Dùng app
+
+Mở trình duyệt vào **`http://localhost:5073`** → **Đăng ký** một tài khoản → dùng feed, tạo bài, like, comment.
+
+---
+
+### Chạy bằng Visual Studio (thay cho bước 4–5)
+
+1. Vẫn phải làm **bước 2–3** trước (Docker + migration) — VS không tự bật Postgres.
+2. Chuột phải **Solution** → **Configure Startup Projects** → **Multiple startup projects**.
+3. Đặt **Action = Start** cho **Api** và **Web** (còn lại **None**) → **OK**.
+4. Bấm **F5**. VS mở trình duyệt ở bản https (`https://localhost:7163`).
+
+### Những lỗi hay gặp
+
+| Triệu chứng | Nguyên nhân & cách xử lý |
+|---|---|
+| Build lỗi `MSB3021/MSB3027 ... file is locked` | App đang chạy khóa DLL. **Dừng app trước khi build** (Ctrl+C hoặc Shift+F5). **Không phải lỗi code.** |
+| Đăng nhập lỗi **CORS** | Mở app ở origin không được khai. Dùng đúng `http://localhost:5073` hoặc `https://localhost:7163` (đã khai trong `Cors:AllowedOrigins`). |
+| Bản https báo lỗi cert/kết nối | Chạy `dotnet dev-certs https --trust` một lần, rồi mở lại. Hoặc dùng bản http cho gọn. |
+| `dotnet ef` not found | Cài: `dotnet tool install --global dotnet-ef`. |
+| API không kết nối được DB | Docker chưa chạy. `docker compose up -d postgres redis`. |
+
+### Dừng
+
+- API/Web: **Ctrl+C** trong từng terminal (hoặc **Shift+F5** trong VS).
+- Hạ tầng: `docker compose down` (thêm `-v` nếu muốn xóa sạch dữ liệu DB).
 
 ## Kiến trúc đã áp dụng (theo CLAUDE.md)
 
@@ -72,6 +137,48 @@ Kiểm tra: `GET /health` → `{"status":"ok"}`. SignalR hub tại `/hubs/chat`.
 hết hạn, client gọi `/api/auth/refresh`. Mỗi lần refresh **xoay vòng** (revoke token cũ, cấp mới);
 dùng lại token đã revoke bị coi là dấu hiệu bị đánh cắp → thu hồi toàn bộ token của user.
 
+## Frontend (Blazor WebAssembly)
+
+Chạy (cần backend chạy trước):
+
+```bash
+dotnet run --project src/Web
+```
+
+Mở **`http://localhost:5073`**. Đã có: đăng ký/đăng nhập, feed (cursor pagination + like),
+tạo bài, chi tiết bài + comment. Đổi địa chỉ API trong `src/Web/wwwroot/appsettings.json`
+(`ApiBaseUrl` / `ApiBaseUrlHttps`) — không cần build lại.
+
+### Cấu trúc frontend (đọc theo thứ tự để hiểu)
+
+| File | Vai trò |
+|---|---|
+| `Program.cs` | Đăng ký DI + 2 HttpClient: **"Api"** (thuần, cho login/register/refresh) và **"AuthorizedApi"** (tự gắn Bearer + refresh). Chọn API base theo scheme trang (tránh mixed-content). |
+| `Models/ApiModels.cs` | Record C# khớp DTO backend (client tự định nghĩa lại — vì là "hợp đồng" giữa 2 bên). |
+| `Auth/TokenStore.cs` | Lưu access + refresh token trong **localStorage** trình duyệt. |
+| `Auth/JwtAuthenticationStateProvider.cs` | Đọc claim từ JWT → Blazor biết đã đăng nhập chưa (điều khiển `<AuthorizeView>`). |
+| `Auth/AuthorizedHandler.cs` | **Điểm cốt lõi**: gắn `Bearer` vào mỗi request; gặp **401** thì tự gọi `/api/auth/refresh`, lấy token mới rồi **thử lại request** — người dùng không bị đá ra. |
+| `Services/AuthApi.cs`, `Services/PostApi.cs` | Gọi API auth / post-feed-like-comment. |
+| `Pages/*.razor` | Login, Register, Home (feed), CreatePost, PostDetail. |
+| `App.razor` | `<CascadingAuthenticationState>` + `<AuthorizeRouteView>`: trang có `[Authorize]` mà chưa login → tự chuyển về `/login`. |
+
+### Luồng đăng nhập (tóm tắt)
+
+```
+Login/Register → API trả (accessToken, refreshToken)
+   → TokenStore lưu vào localStorage
+   → AuthenticationStateProvider.NotifyChanged() → navbar đổi sang trạng thái đã đăng nhập
+   → gọi API có [Authorize]: AuthorizedHandler gắn Bearer
+       → nếu 401 (access hết hạn): tự refresh → thử lại → người dùng không hay biết
+```
+
+### ⚠️ CORS & port (nguồn lỗi hay gặp)
+
+Backend chỉ cho phép **origin** frontend đã khai trong `src/Api/appsettings.json` → `Cors:AllowedOrigins`
+(hiện: `http://localhost:5073` và `https://localhost:7163`). Mở app ở origin/scheme khác → **lỗi CORS**.
+Trang **https** phải gọi API **https** (không thì dính mixed-content) — `Program.cs` đã tự chọn đúng scheme.
+Đơn giản nhất khi học: mở bản **http** `http://localhost:5073`.
+
 ## Test
 
 Integration test dùng **Testcontainers** (bật Postgres thật trong Docker, apply migration, test
@@ -85,12 +192,13 @@ dotnet test tests/IntegrationTests
 
 Bao phủ: Auth (register/login, trùng username, citext, validation), Follow (idempotent, tự-follow,
 counter), Like (idempotent, unlike), Post (tạo/media/xóa 403/soft delete), Comment (reply, cursor),
-Feed (fan-out on read, thứ tự, cursor). Tổng **32 test**.
+Feed (fan-out on read, thứ tự, cursor), RefreshToken (xoay vòng, revoke, phát hiện tái sử dụng).
+Tổng **38 test**.
 
 ## Bước tiếp theo (chưa làm)
 
-- [ ] Nối `ChatHub.SendMessage` vào service persist (cấp seq trong transaction) rồi mới broadcast.
+- [ ] Nối `ChatHub.SendMessage` vào service persist (cấp seq trong transaction) rồi mới broadcast +
+      màn chat ở frontend.
 - [ ] Worker flush like counter từ Redis xuống DB (hiện counter cập nhật trực tiếp trong request).
-- [ ] Endpoint profile user + list follower/following.
+- [ ] Endpoint + màn profile user, list follower/following.
 - [ ] Upload media thật lên MinIO (hiện chỉ nhận URL).
-- [ ] Frontend (React/Blazor).

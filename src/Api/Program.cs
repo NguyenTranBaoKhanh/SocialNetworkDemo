@@ -23,6 +23,17 @@ builder.Services.AddProblemDetails();
 
 builder.Services.AddControllers();
 
+// ---- CORS: cho phép các frontend (Blazor giờ, React sau này) gọi API ----
+// Danh sách origin đọc từ config "Cors:AllowedOrigins" -> thêm frontend mới chỉ cần thêm 1 dòng.
+const string FrontendCors = "frontend";
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? ["http://localhost:5073"];
+builder.Services.AddCors(o => o.AddPolicy(FrontendCors, p => p
+    .WithOrigins(allowedOrigins)
+    .AllowAnyHeader()
+    .AllowAnyMethod()
+    .AllowCredentials()));   // AllowCredentials cần cho SignalR (WebSocket) sau này
+
 // ---- SignalR (+ Redis backplane khi chạy nhiều instance) ----
 var signalr = builder.Services.AddSignalR();
 var redisConn = builder.Configuration.GetConnectionString("Redis");
@@ -74,7 +85,13 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseExceptionHandler();
-app.UseHttpsRedirection();
+
+// Chỉ ép HTTPS ngoài Development. Trong dev, frontend Blazor gọi http để tránh
+// rắc rối cert tự ký + redirect 307 làm hỏng CORS/preflight.
+if (!app.Environment.IsDevelopment())
+    app.UseHttpsRedirection();
+
+app.UseCors(FrontendCors);
 app.UseAuthentication();
 app.UseAuthorization();
 

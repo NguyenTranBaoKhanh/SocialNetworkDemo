@@ -1,66 +1,95 @@
-# Handoff — SocialDemo (.NET 10 backend)
+# Handoff — SocialDemo (.NET 10, full-stack)
 
 ## Mục tiêu của session kế tiếp
 Người dùng muốn **tìm hiểu và được giải thích về cấu trúc code hiện tại** (mục đích học tập).
-Đây KHÔNG phải phiên viết thêm tính năng. Vai trò session sau: **giải thích, hướng dẫn đọc code**
-theo tốc độ người học, tiếng Việt. Người dùng là beginner/intermediate với .NET backend —
-đã hỏi những câu cơ bản ("đây là backend đúng không", "chạy được chưa", "test bằng Postman thế nào").
-Giải thích cần dễ hiểu, tránh giả định kiến thức nâng cao, nhưng không hạ thấp.
+Vai trò session sau: **giải thích, hướng dẫn đọc code** theo tốc độ người học, tiếng Việt.
+Người dùng là beginner/intermediate với .NET — đã hỏi những câu cơ bản ("đây là backend đúng không",
+"chạy được chưa", "unit test hay integration test", "lỗi CORS"). Giải thích dễ hiểu, không giả định
+kiến thức nâng cao, nhưng không hạ thấp.
 
 ## Ngôn ngữ
-Trả lời **tiếng Việt** (có dấu đầy đủ). Thuật ngữ kỹ thuật + tên định danh giữ nguyên tiếng Anh.
+Trả lời **tiếng Việt** (đủ dấu). Thuật ngữ kỹ thuật + tên định danh giữ nguyên tiếng Anh.
 
 ## Dự án là gì
-Backend mạng xã hội đơn giản: post / comment / like / follow / feed + khung chat realtime.
-Monolith theo Clean Architecture. Đã build sạch (0 warning/error), chạy được, test end-to-end
-17 case qua HTTP đều pass. Đã push lên GitHub.
+Mạng xã hội đơn giản, **full-stack .NET 10**: backend REST API (monolith Clean Architecture) +
+frontend Blazor WebAssembly. Tính năng: đăng ký/đăng nhập (JWT + refresh token), post, comment,
+like, follow, feed. Có khung chat SignalR (chưa chạy thật). Build sạch, 38 integration test pass,
+đã chạy end-to-end qua trình duyệt. Đã push GitHub.
 
 - Repo: https://github.com/NguyenTranBaoKhanh/SocialNetworkDemo
-- Thư mục local: `D:\SOFT\Learning\SocialDemo`
+- Local: `D:\SOFT\Learning\SocialDemo`
 
-## Nơi đọc để hiểu (KHÔNG lặp lại nội dung ở đây — trỏ tới file)
-- **CLAUDE.md** — bối cảnh & định hướng kiến trúc toàn dự án (tech stack, roadmap phase, nguyên tắc).
-- **README.md** — cấu trúc thư mục, cách chạy, bảng API endpoints đã có.
-- **db/schema.sql** — thiết kế schema SQL kèm chú thích lý do từng quyết định (nguồn thiết kế gốc).
-- Code theo tầng:
-  - `src/Domain/Entities/*` — entity thuần (User, Post, Comment, Like, Follow, Conversation, ConversationMember, Message, MessageAttachment, PostMedia).
-  - `src/Application/*` — use case services (AuthService, PostService, CommentService, LikeService, FollowService, FeedService) + abstractions trong `Common/` (IAppDbContext, ICurrentUser, IPasswordHasher, IJwtTokenGenerator, AppExceptions, Dtos).
-  - `src/Infrastructure/*` — `Persistence/AppDbContext.cs` (EF Core fluent config khớp schema), `Security/` (JWT + password hasher), `DependencyInjection.cs`.
-  - `src/Api/*` — `Program.cs` (wiring), `Controllers/*`, `Hubs/ChatHub.cs`, `Common/` (CurrentUser đọc JWT, AppExceptionHandler map lỗi → ProblemDetails).
+## Nơi đọc để hiểu (KHÔNG lặp nội dung — trỏ tới file)
+- **CLAUDE.md** — định hướng kiến trúc toàn dự án (stack, roadmap, nguyên tắc).
+- **README.md** — cấu trúc, cách chạy 3 phần (Docker/API/Web), bảng API endpoints, cách test.
+- **db/schema.sql** — thiết kế schema SQL kèm chú thích lý do (nguồn thiết kế gốc).
 
-## Các quyết định thiết kế đáng giải thích cho người học (đã áp dụng trong code)
+### Backend (`src/`)
+- `Domain/Entities/*` — entity thuần (User, Post, Comment, Like, Follow, RefreshToken, PostMedia,
+  Conversation, ConversationMember, Message, MessageAttachment).
+- `Application/*` — use case service (AuthService, PostService, CommentService, LikeService,
+  FollowService, FeedService) + abstraction trong `Common/` (IAppDbContext, ICurrentUser,
+  IPasswordHasher, IJwtTokenGenerator, AppExceptions, Dtos).
+- `Infrastructure/*` — `Persistence/AppDbContext.cs` (EF Core fluent config khớp schema),
+  `Security/` (JWT + password hasher + refresh token), migrations, `DependencyInjection.cs`.
+- `Api/*` — `Program.cs` (wiring: DI, JWT, CORS, SignalR), `Controllers/*`, `Hubs/ChatHub.cs`,
+  `Common/` (CurrentUser đọc JWT claim, AppExceptionHandler map lỗi → ProblemDetails).
+
+### Frontend (`src/Web/` — Blazor WebAssembly)
+- `Program.cs` — đăng ký DI, 2 HttpClient ("Api" thuần + "AuthorizedApi" có Bearer/refresh),
+  chọn ApiBaseUrl theo scheme (http/https) để tránh mixed-content.
+- `Auth/TokenStore.cs` — lưu access + refresh token trong localStorage (qua Blazored.LocalStorage).
+- `Auth/JwtAuthenticationStateProvider.cs` — parse claim từ JWT để Blazor biết đã đăng nhập chưa.
+- `Auth/AuthorizedHandler.cs` — DelegatingHandler: gắn Bearer vào mỗi request, gặp 401 thì tự gọi
+  `/api/auth/refresh` rồi thử lại request (điểm hay nhất để giải thích cho người học).
+- `Services/AuthApi.cs` (login/register/logout/refresh), `Services/PostApi.cs` (feed/post/like/comment).
+- `Models/ApiModels.cs` — record C# khớp DTO của backend (client tự định nghĩa lại).
+- `Pages/` — Login, Register, Home (feed), CreatePost, PostDetail.
+- `Layout/MainLayout.razor` — navbar dùng `<AuthorizeView>` để hiện login/logout theo trạng thái.
+- `App.razor` — `<CascadingAuthenticationState>` + `<AuthorizeRouteView>` (chưa login → RedirectToLogin).
+
+## Quyết định thiết kế đáng giải thích cho người học
 1. **Clean Architecture / hướng phụ thuộc**: Api → Application → Domain; Infrastructure → Application/Domain.
    Application dùng DB qua interface `IAppDbContext` (định nghĩa ở Application, hiện thực ở Infrastructure)
-   để không phụ thuộc ngược vào Infrastructure. Đây là điểm dễ gây khó hiểu nhất cho beginner — nên giải thích kỹ.
-2. **Like/Follow chống trùng ở tầng DB** bằng khóa kép (composite key); `like_count`/`follower_count`
-   chỉ là "counter cache", nguồn sự thật là bảng `likes`/`follows`.
-3. **Feed = fan-out on read** (query lúc đọc) + cursor pagination theo `(CreatedAt, Id)`. Xem `FeedService.cs`.
-4. **Chat** (mới có khung, chưa chạy thật): ordering bằng `seq` per conversation (không dùng client timestamp),
-   `client_msg_id` chống gửi trùng, presence/typing để ở Redis. Xem chú thích trong `ChatHub.cs` và `db/schema.sql`.
-5. **Auth**: password hash bằng PasswordHasher của ASP.NET Core Identity (PBKDF2); JWT tự sinh trong
-   `JwtTokenGenerator`. Lỗi nghiệp vụ ném `AppException` → `AppExceptionHandler` map sang HTTP status.
-6. **snake_case**: DbContext tự đổi tên cột sang snake_case để khớp quy ước PostgreSQL trong schema.sql.
+   để không phụ thuộc ngược. Điểm khó nhất cho beginner — giải thích kỹ.
+2. **Backend là API thuần, frontend-agnostic**: Blazor chỉ là 1 client. Thêm React/mobile sau chỉ cần
+   thêm origin vào `Cors:AllowedOrigins`. Đây là lý do tách client/server.
+3. **Auth 2 lớp token**: access token JWT stateless (15 phút) + refresh token lưu HASH ở DB (7 ngày,
+   thu hồi được). Refresh **xoay vòng**; dùng lại token đã revoke → thu hồi toàn bộ token của user
+   (phát hiện đánh cắp). Xem `AuthService.RefreshAsync`.
+4. **Validate token do framework lo** (middleware JwtBearer trong `Program.cs`), chỉ **sinh** token là code mình.
+5. **Like/Follow chống trùng ở tầng DB** bằng khóa kép; `like_count`/`follower_count` chỉ là counter cache.
+6. **Feed = fan-out on read** + cursor pagination theo `(CreatedAt, Id)`. Xem `FeedService`.
+7. **snake_case**: DbContext tự đổi tên cột sang snake_case khớp quy ước PostgreSQL.
+8. **Frontend refresh tự động**: `AuthorizedHandler` bắt 401 → refresh → retry, người dùng không bị đá ra.
+
+## Test
+- `tests/IntegrationTests/` — 38 test xUnit chạy trên **Postgres thật** (Testcontainers), KHÔNG mock
+  (chỉ có `TestCurrentUser` là fake). Bao Auth/Follow/Like/Post/Comment/Feed/RefreshToken.
+- Đã bắt 1 bug thật: cursor pagination trong `CommentService.ListAsync` (off-by-one).
+- Chạy: `dotnet test tests/IntegrationTests` (cần Docker).
 
 ## Trạng thái hạ tầng (quan trọng — dễ vấp)
-- Docker: **postgres cổng 5433**, **redis cổng 6380** (KHÁC mặc định 5432/6379, vì máy đã có postgres/valkey
-  chạy sẵn ở cổng chuẩn). Connection string trong `src/Api/appsettings.json` và `AppDbContextFactory.cs` đã trỏ 5433/6380.
-- Migration `InitialCreate` đã apply; DB `socialdemo` có 10 bảng + extension uuid-ossp/citext.
-- Có sẵn user test `alice`/`bob` trong DB (password `secret123`) nếu chưa `docker compose down -v`.
-- Ghi chú non-obvious này đã lưu trong memory `socialdemo-setup` (tự nạp ở session sau cùng project).
+- Docker: **postgres 5433**, **redis 6380** (KHÁC mặc định 5432/6379 vì máy đã có dịch vụ ở cổng chuẩn).
+- Backend chạy: http `5273`, https `7068`. Frontend Blazor: http `5073`, https `7163`.
+- **CORS**: chỉ cho phép origin `http://localhost:5073` và `https://localhost:7163`. Mở app ở origin
+  khác (hoặc lệch scheme) sẽ lỗi CORS — đây là lỗi người dùng vừa gặp.
+- Migration đã apply; DB `socialdemo` có bảng users/posts/.../refresh_tokens.
+- Ghi chú non-obvious lưu trong memory `socialdemo-setup` (tự nạp ở session sau).
 
-## Chưa làm (nếu người dùng chuyển từ học sang làm tiếp)
-- ChatHub chưa persist/gửi message thật (mới join/typing).
-- Chưa có worker flush counter từ Redis; hiện counter cập nhật trực tiếp trong request.
-- Chưa có endpoint profile user / list follower-following.
-- Chưa upload media thật lên MinIO (mới nhận URL).
-- **Chưa có frontend** (toàn bộ mới là backend trả JSON).
-
-## Cách chạy nhanh (để vừa đọc code vừa thử)
+## Cách chạy (3 phần, đúng thứ tự)
 1. `docker compose -f "D:/SOFT/Learning/SocialDemo/docker-compose.yml" up -d postgres redis`
-2. `dotnet run --project "D:/SOFT/Learning/SocialDemo/src/Api"` (cổng http mặc định 5273)
-3. Test: import `SocialDemo.postman_collection.json` vào Postman, hoặc `GET http://localhost:5273/health`.
-4. Xem DB: pgAdmin4 nối `localhost:5433` / db `socialdemo` / `postgres`/`postgres`.
+2. `dotnet run --project "D:/SOFT/Learning/SocialDemo/src/Api"` (terminal 1)
+3. `dotnet run --project "D:/SOFT/Learning/SocialDemo/src/Web"` (terminal 2)
+4. Mở trình duyệt `http://localhost:5073` (bản http đơn giản nhất, không dính cert/mixed-content).
+- ⚠️ Không build khi app đang chạy (process khóa DLL → lỗi MSB3021/3027, KHÔNG phải lỗi code).
+
+## Chưa làm (nếu chuyển từ học sang làm tiếp)
+- ChatHub chưa persist/gửi message thật (mới join/typing) — frontend cũng chưa có màn chat.
+- Chưa có worker flush counter từ Redis (counter cập nhật trực tiếp trong request).
+- Chưa có màn profile user / list follower-following (backend cũng chưa có endpoint này).
+- Chưa upload media thật lên MinIO (mới nhận URL).
 
 ## Skill gợi ý cho session sau
-- Không bắt buộc skill nào. Nếu người dùng muốn đi sâu kiến trúc và cải thiện: `improve-codebase-architecture`.
-- Nếu chuyển sang lập kế hoạch làm tiếp (chat/frontend): `hd-planning` hoặc `hd-brainstorming`.
+- Đi sâu kiến trúc / cải thiện: `improve-codebase-architecture`.
+- Lập kế hoạch làm tiếp (chat, profile, media): `hd-planning` hoặc `hd-brainstorming`.

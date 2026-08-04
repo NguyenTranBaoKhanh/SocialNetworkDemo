@@ -1,0 +1,61 @@
+@page "/login"
+@inject AuthApi Auth
+@inject NavigationManager Nav
+
+<PageTitle>Đăng nhập</PageTitle>
+
+<div class="row justify-content-center">
+    <div class="col-md-5">
+        <h1 class="h3 mb-3">Đăng nhập</h1>
+
+        <EditForm Model="_model" OnValidSubmit="SubmitAsync">
+            <DataAnnotationsValidator />
+
+            <div class="mb-3">
+                <label class="form-label">Username hoặc Email</label>
+                <InputText class="form-control" @bind-Value="_model.UsernameOrEmail" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Mật khẩu</label>
+                <InputText type="password" class="form-control" @bind-Value="_model.Password" />
+            </div>
+
+            @if (_error is not null)
+            {
+                <div class="alert alert-danger py-2">@_error</div>
+            }
+
+            <button class="btn btn-primary w-100" type="submit" disabled="@_busy">
+                @(_busy ? "Đang xử lý..." : "Đăng nhập")
+            </button>
+        </EditForm>
+
+        <p class="mt-3 mb-0">Chưa có tài khoản? <a href="register">Đăng ký</a></p>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+
+    private readonly LoginModel _model = new();
+    private string? _error;
+    private bool _busy;
+
+    private async Task SubmitAsync()
+    {
+        _busy = true;
+        _error = null;
+
+        _error = await Auth.LoginAsync(new LoginRequest(_model.UsernameOrEmail, _model.Password));
+
+        _busy = false;
+        if (_error is null)
+            Nav.NavigateTo(string.IsNullOrWhiteSpace(ReturnUrl) ? "" : Uri.UnescapeDataString(ReturnUrl));
+    }
+
+    private class LoginModel
+    {
+        public string UsernameOrEmail { get; set; } = "";
+        public string Password { get; set; } = "";
+    }
+}
