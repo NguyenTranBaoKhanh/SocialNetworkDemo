@@ -8,7 +8,7 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="h3 mb-0">Feed</h1>
-    <a class="btn btn-primary btn-sm" href="create">+ Tạo bài</a>
+    <button class="btn btn-primary btn-sm" @onclick="OpenCreate">+ Tạo bài</button>
 </div>
 
 @if (_loading && _posts.Count == 0)
@@ -18,7 +18,9 @@
 else if (_posts.Count == 0)
 {
     <div class="alert alert-info">
-        Chưa có bài nào. Hãy <a href="create">tạo bài đầu tiên</a>, hoặc follow người khác để thấy bài của họ.
+        Chưa có bài nào. Hãy
+        <a href="#" @onclick:preventDefault @onclick="OpenCreate">tạo bài đầu tiên</a>,
+        hoặc follow người khác để thấy bài của họ.
     </div>
 }
 else
@@ -71,6 +73,12 @@ else
     }
 }
 
+@* Popup tạo bài mới. *@
+@if (_showCreate)
+{
+    <CreatePostDialog OnClose="CloseCreate" OnCreated="OnPostCreated" />
+}
+
 @* Popup bình luận — chỉ render khi có post đang mở. *@
 @if (_commentsPost is not null)
 {
@@ -81,6 +89,7 @@ else
     private readonly List<PostResponse> _posts = new();
     private string? _nextCursor;
     private bool _loading;
+    private bool _showCreate;              // đang mở popup tạo bài
     private PostResponse? _commentsPost;   // post đang mở popup bình luận
 
     protected override Task OnInitializedAsync() => LoadAsync(reset: true);
@@ -106,6 +115,16 @@ else
         var result = post.LikedByMe ? await Api.UnlikeAsync(post.Id) : await Api.LikeAsync(post.Id);
         if (result is not null && i >= 0)
             _posts[i] = post with { LikeCount = result.LikeCount, LikedByMe = result.LikedByMe };
+    }
+
+    private void OpenCreate() => _showCreate = true;
+    private void CloseCreate() => _showCreate = false;
+
+    // Đăng bài xong -> thêm lên đầu feed (feed mới-nhất-trước) và đóng popup.
+    private void OnPostCreated(PostResponse post)
+    {
+        _posts.Insert(0, post);
+        _showCreate = false;
     }
 
     private void OpenComments(PostResponse post) => _commentsPost = post;

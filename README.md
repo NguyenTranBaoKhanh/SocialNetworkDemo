@@ -164,9 +164,14 @@ tạo bài **kèm ảnh/video** (upload lên MinIO), chi tiết bài + comment. 
 | `Auth/TokenStore.cs` | Lưu access + refresh token trong **localStorage** trình duyệt. |
 | `Auth/JwtAuthenticationStateProvider.cs` | Đọc claim từ JWT → Blazor biết đã đăng nhập chưa (điều khiển `<AuthorizeView>`). |
 | `Auth/AuthorizedHandler.cs` | **Điểm cốt lõi**: gắn `Bearer` vào mỗi request; gặp **401** thì tự gọi `/api/auth/refresh`, lấy token mới rồi **thử lại request** — người dùng không bị đá ra. |
-| `Services/AuthApi.cs`, `Services/PostApi.cs` | Gọi API auth / post-feed-like-comment. |
-| `Pages/*.razor` | Login, Register, Home (feed), CreatePost, PostDetail. |
+| `Services/AuthApi.cs`, `Services/PostApi.cs`, `Services/MediaApi.cs` | Gọi API auth / post-feed-like-comment / upload media. |
+| `Pages/*.razor` | Login, Register, Home (feed), PostDetail. |
+| `Components/CreatePostDialog.razor` | **Popup** tạo bài (nội dung + ảnh/video), mở từ feed — không chuyển trang; đăng xong thêm bài lên đầu feed. |
+| `Components/CommentsDialog.razor` | **Popup** bình luận: xem/thêm bình luận + **trả lời đa cấp** (render đệ quy), mở từ nút 💬 ở feed. |
 | `App.razor` | `<CascadingAuthenticationState>` + `<AuthorizeRouteView>`: trang có `[Authorize]` mà chưa login → tự chuyển về `/login`. |
+
+> Tạo bài và bình luận đều là **popup ngay tại feed** (component trong `Components/`), không rời trang.
+> Trang `PostDetail` (`/post/{id}`) vẫn còn để xem 1 bài qua URL trực tiếp.
 
 ### Luồng đăng nhập (tóm tắt)
 

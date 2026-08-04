@@ -48,8 +48,12 @@ like, follow, feed. Có khung chat SignalR (chưa chạy thật). Build sạch, 
 - `Services/AuthApi.cs` (login/register/logout/refresh), `Services/PostApi.cs` (feed/post/like/comment),
   `Services/MediaApi.cs` (upload ảnh/video multipart).
 - `Models/ApiModels.cs` — record C# khớp DTO của backend (client tự định nghĩa lại).
-- `Pages/` — Login, Register, Home (feed), CreatePost (kèm chọn/preview ảnh/video), PostDetail.
-- `ClientSettings.cs` — giữ ApiBaseUrl để ghép URL ảnh tuyệt đối cho `<img>`.
+- `Pages/` — Login, Register, Home (feed), PostDetail (xem 1 bài qua URL).
+- `Components/CreatePostDialog.razor` — **popup** tạo bài (nội dung + ảnh/video), mở từ feed, đăng xong
+  thêm bài lên đầu feed (không chuyển trang; trang `/create` cũ đã bỏ).
+- `Components/CommentsDialog.razor` — **popup** bình luận + **trả lời đa cấp** (render đệ quy theo `parentId`),
+  mở từ nút 💬 ở feed (không chuyển trang).
+- `ClientSettings.cs` — giữ ApiBaseUrl để ghép URL ảnh/video tuyệt đối cho `<img>`/`<video>`.
 - `Layout/MainLayout.razor` — navbar dùng `<AuthorizeView>` để hiện login/logout theo trạng thái.
 - `App.razor` — `<CascadingAuthenticationState>` + `<AuthorizeRouteView>` (chưa login → RedirectToLogin).
 
